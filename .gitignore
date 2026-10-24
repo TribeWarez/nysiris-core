@@ -1,0 +1,8 @@
+/target
+**/target
+**/*.enc
+**/history/
+**/dev-master.key
+*.bak
+.DS_Store
+

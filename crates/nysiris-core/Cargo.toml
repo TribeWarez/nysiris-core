@@ -1,0 +1,20 @@
+[package]
+name = "nysiris-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Shared primitives for Nysiris native clients: identity, message framing, crypto, contacts, and transport traits."
+
+[dependencies]
+blake2.workspace = true
+chacha20poly1305.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+x25519-dalek.workspace = true

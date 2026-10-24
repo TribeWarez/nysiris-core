@@ -1,0 +1,22 @@
+[package]
+name = "nysiris-chat-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "P2P chat engine for Nysiris native clients: sealed DMs, contacts, conversation summaries, and encrypted local history."
+
+[dependencies]
+nysiris-core.workspace = true
+nysiris-chat-history.workspace = true
+hex.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+nysiris-testkit.workspace = true
+tempfile.workspace = true

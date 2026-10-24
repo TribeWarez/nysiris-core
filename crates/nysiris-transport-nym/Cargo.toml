@@ -1,0 +1,19 @@
+[package]
+name = "nysiris-transport-nym"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Nym transport adapter for Nysiris native clients. The real nym-sdk adapter is behind the nym feature and was verified on mainnet; default builds use an explicit unavailable stub."
+
+[features]
+default = []
+nym = ["dep:nym-sdk", "dep:tokio"]
+
+[dependencies]
+nysiris-core.workspace = true
+thiserror.workspace = true
+nym-sdk = { version = "1.21", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"], optional = true }

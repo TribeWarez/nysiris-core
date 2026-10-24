@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/nysiris-core",
+  "crates/nysiris-chat-history",
+  "crates/nysiris-chat-core",
+  "crates/nysiris-transport-nym",
+  "crates/nysiris-testkit",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/TribeWarez/nysiris-core"
+rust-version = "1.85"
+publish = false
+
+[workspace.dependencies]
+nysiris-core = { path = "crates/nysiris-core" }
+nysiris-chat-history = { path = "crates/nysiris-chat-history" }
+nysiris-chat-core = { path = "crates/nysiris-chat-core" }
+nysiris-transport-nym = { path = "crates/nysiris-transport-nym" }
+nysiris-testkit = { path = "crates/nysiris-testkit" }
+
+blake2 = "0.10"
+chacha20poly1305 = "0.10"
+ed25519-dalek = "3"
+hex = "0.4"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
