@@ -53,6 +53,10 @@ cargo check -p nysiris-transport-nym --features nym   # heavy first build
   line is internally inconsistent. Do not run `cargo update` without testing
   `--features nym`.
 
+## Security
+
+See `SECURITY.md` for private reporting and scope reminders.
+
 ## License
 
 Apache-2.0. See `LICENSE`.
