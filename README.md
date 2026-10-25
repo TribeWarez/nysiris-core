@@ -1,10 +1,16 @@
 # Nysiris-Core
 
-Shared Rust primitives for Nysiris-native clients and services.
+[![CI](https://github.com/TribeWarez/nysiris-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TribeWarez/nysiris-core/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue.svg)](#requirements)
+[![Sponsor](https://img.shields.io/badge/sponsor-TribeWarez-ea4aaa.svg?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/TribeWarez)
 
-Repository: <https://github.com/TribeWarez/nysiris-core> · License: Apache-2.0
+Shared Rust crates for Nysiris-native clients and services: chat identities, a
+signed DM envelope, encrypted local history, a transport-agnostic chat engine,
+and a real [Nym](https://nymtech.net) transport adapter.
 
-This repository is the middle of the dependency graph:
+Nysiris-Core is the middle of the dependency graph. It must not depend on
+Nysiris or NCC — both consume it:
 
 ```text
 Nysiris PWA ──wire──► Nysiris services ──► Nysiris-Core
@@ -12,25 +18,139 @@ Nysiris PWA ──wire──► Nysiris services ──► Nysiris-Core
 NCC (PySide6 + ncc-daemon) ───────────────────┘
 ```
 
-It must not depend on Nysiris or NCC. Nysiris-side services consume the
-service/social crates; NCC consumes the chat/transport/history crates.
+Nysiris services consume the service/social crates; NCC consumes the
+chat/transport/history crates. There is no chat service, no server-side message
+store, and no SQLite anywhere in this repository.
 
-## Status
+## Crates
 
-Phase 0 walking skeleton:
+| Crate | Responsibility |
+|---|---|
+| [`nysiris-core`](crates/nysiris-core) | Identity, DM framing and crypto, contacts, messages, transport trait, sealed files |
+| [`nysiris-chat-core`](crates/nysiris-chat-core) | 1:1 chat engine and capability-key rooms over the transport trait |
+| [`nysiris-chat-history`](crates/nysiris-chat-history) | Encrypted append-only flat-file history. No SQLite |
+| [`nysiris-transport-nym`](crates/nysiris-transport-nym) | Real `nym-sdk` adapter behind the `nym` feature; default builds use an explicit unavailable stub |
+| [`nysiris-testkit`](crates/nysiris-testkit) | In-memory transport and test fixtures |
 
-- `nysiris-core`: chat identity, signed DM inner envelope, sealed DM crypto,
-  contacts, message types, transport trait, encrypted sealed files.
-- `nysiris-chat-history`: encrypted append-only flat-file history. No SQLite.
-- `nysiris-chat-core`: 1:1 chat engine plus capability-key rooms with
-  client-side fan-out over a transport trait.
-- `nysiris-transport-nym`: real `nym-sdk` adapter behind the `nym` feature;
-  default builds keep an explicit unavailable stub. Live mainnet DM and room
-  delivery were verified with two native daemons.
-- `nysiris-testkit`: in-memory transport.
+Rooms are capability-key groups: a random room key is shared in a signed
+invite, the sender seals one message and fans it out to every member, and there
+is no relay or server roster. Rooms are capped at 16 members; removing a member
+requires a new room key.
 
-OS keychain integration and crates.io publication are next. Crates are
-`publish = false` until the API stabilizes.
+## Quick start
+
+The crates are not on crates.io yet (see [Releasing](#releasing)). Pin the
+current tag:
+
+```toml
+[dependencies]
+nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
+nysiris-chat-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
+nysiris-chat-history = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
+```
+
+The real Nym adapter is opt-in and compiles the full `nym-sdk` stack:
+
+```toml
+nysiris-transport-nym = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2", features = ["nym"] }
+```
+
+Without the feature, `NymTransport::connect` fails explicitly instead of
+pretending to deliver messages, so the default build stays light and offline.
+
+Working on this repository itself:
+
+```bash
+git clone https://github.com/TribeWarez/nysiris-core
+cd nysiris-core
+cargo test --workspace --locked
+```
+
+## Requirements
+
+- Rust 1.85 or newer (workspace `rust-version`, `edition = "2021"`).
+- No system dependencies for the default build.
+- `--features nym` pulls the heavy `nym-sdk` tree; the first build takes several
+  minutes. CI builds it on Linux, and `Cargo.lock` is required for it (see
+  [Nym version pinning](#nym-version-pinning)).
+
+## What works today
+
+| Area | State |
+|---|---|
+| Identity and DM crypto | ed25519 → X25519, ephemeral DH, BLAKE2b-256 KDF, XChaCha20-Poly1305 |
+| DM envelopes | Signed inner envelope binds `from`, `to`, `ts`, `msgId`, body |
+| Rooms | Capability-key groups, client-side fan-out, 16-member cap |
+| History | Encrypted append-only journals, hashed conversation filenames |
+| Transport | `Transport` trait; `nysiris-testkit` fake; real Nym behind `nym` |
+| Live Nym | DM and room delivery verified between two native daemons on mainnet |
+| Test suite | Fully offline; the fake transport is used everywhere |
+
+Still pending: OS keychain integration, attachments, packaging, and crates.io
+publication.
+
+## Verify
+
+One command runs the whole gate in CI and locally:
+
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo doc --workspace --no-deps --locked
+bash scripts/check-nym-pins.sh                                  # resolve check, no build
+cargo check -p nysiris-transport-nym --features nym --locked    # heavy first build
+```
+
+Every cargo invocation is `--locked`: the committed `Cargo.lock` is
+load-bearing. Live Nym tests are manual and opt-in; they need two native
+clients and `NCC_LIVE_NYM=1`.
+
+## Nym version pinning
+
+The Nym 1.22.x patch line on crates.io is internally inconsistent:
+`nym-client-core` 1.22.2 requires the yanked `tokio_with_wasm` 0.10.1, and the
+1.22.1 fallback does not compile against the 1.22.2
+`nym-crypto`/`nym-client-core-config-types` siblings. Only the pinned 1.22.0 set
+builds.
+
+- `Cargo.lock` pins that set for this workspace.
+- `nysiris-transport-nym` pins every Nym crate exactly inside its `nym` feature,
+  so downstream `features = ["nym"]` builds resolve the same set without our
+  lockfile.
+- `scripts/check-nym-pins.sh` fails if a from-scratch resolve drifts. Run it
+  after any dependency change; do not run `cargo update` without re-testing
+  `--features nym`.
+
+## Design rules
+
+- `nysiris-core` stays Nym-free and UI-free; `nym-sdk` lives only in
+  `nysiris-transport-nym`.
+- No Qt, Python, React, Nysiris service binaries, or NCC daemon code here.
+- Chat protocol domains are `nysiris-chat-v1/*`, never Nysiris social
+  `fly-social-v1/*` domains.
+- Chat history is encrypted flat files; no SQLite, no plaintext message bytes on
+  disk.
+- Nysiris must not depend on `nysiris-chat-core`; NCC must not depend on
+  Nysiris.
+
+`AGENTS.md` documents the full set of invariants, including the ones that must
+not be relaxed by automated contributors.
+
+## Security
+
+This is experimental protocol code and has not had an independent security
+audit. Do not treat the DM, room, or history constructions as audited production
+cryptography.
+
+- Do not report vulnerabilities in a public issue. Use GitHub's private advisory
+  flow: <https://github.com/TribeWarez/nysiris-core/security/advisories/new>.
+- Do not log or commit message content, keys, identities, contact lists, or Nym
+  `sp-storage`.
+- Nym hides who-talks-to-whom from network observers, not all metadata from
+  gateways.
+
+See [`SECURITY.md`](SECURITY.md) for scope and reporting details.
 
 ## Releasing
 
@@ -40,65 +160,41 @@ Releases are cut by tagging the workspace version:
 git tag v0.1.2 && git push origin v0.1.2
 ```
 
-`.github/workflows/release.yml` verifies the tag against
-`[workspace.package].version`, re-runs the full gate (fmt, clippy, tests, docs,
-Nym feature compile), validates the packaged file lists, and creates a GitHub
-release. crates.io publication runs in dependency order and is gated on the
-`CORE_PUBLISH_ENABLED` repository variable plus a `CARGO_REGISTRY_TOKEN` secret
-bound to the `crates-io` environment:
+[`release.yml`](.github/workflows/release.yml) verifies the tag against
+`[workspace.package].version`, re-runs the full gate, validates the packaged
+file lists, creates a GitHub release, and publishes to crates.io in dependency
+order when publication is enabled:
 
 ```bash
 gh variable set CORE_PUBLISH_ENABLED --repo TribeWarez/nysiris-core --body true
 gh secret set CARGO_REGISTRY_TOKEN --repo TribeWarez/nysiris-core
 ```
 
-Or run `./scripts/configure-github.ps1 -EnablePublish` once; it also installs the
-Nysiris Android signing secrets and creates the `crates-io` environment.
+Or run `./scripts/configure-github.ps1 -EnablePublish` once; it also creates the
+`crates-io` environment. crates.io versions are immutable, so the publish job
+skips versions that already exist and a failed release can be re-run.
 
-crates.io versions are immutable, so the publish job skips versions that already
-exist and a failed release can be re-run. A dependent crate can only be
-`cargo package`d after its dependency is on crates.io, so `cargo publish`
-performs the verified build per crate, in dependency order.
+Publication is currently disabled, so no version of these crates exists on
+crates.io yet. The `v0.1.0` tag predates this workflow and is already pinned by
+NCC's submodule; cut new releases by tagging a new commit rather than moving it.
 
-The existing `v0.1.0` tag predates publish enablement and is already pinned by
-NCC's submodule. For the first published release, bump the workspace version and
-tag the new commit rather than moving `v0.1.0`.
+## Community
 
-## Verify
+| Where | What for |
+|---|---|
+| [Discussions](https://github.com/TribeWarez/nysiris-core/discussions) | Questions, design debate, and show-and-tell |
+| [Issues](https://github.com/TribeWarez/nysiris-core/issues) | Reproducible bugs and concrete feature requests |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, gates, and review expectations |
+| [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting |
+| [`AGENTS.md`](AGENTS.md) | Scope rules for human and AI contributors |
+| [Sponsor](https://github.com/sponsors/TribeWarez) | Fund maintenance of the protocol crates |
+| [TribeWarez/ncc](https://github.com/TribeWarez/ncc) | The PySide6 client that consumes the chat crates; UI issues belong there |
+| [nymtech.net](https://nymtech.net) · [nymtech/nym](https://github.com/nymtech/nym) | Upstream Nym network, SDK, and docs |
 
-```bash
-cargo fmt --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-bash scripts/check-nym-pins.sh   # from-scratch Nym resolve, no build
-cargo check -p nysiris-transport-nym --features nym --locked   # heavy first build
-```
-
-## Security notes
-
-- DM crypto mirrors the Nysiris construction: ed25519 identity converted to
-  X25519, ephemeral DH, BLAKE2b-256 KDF, XChaCha20-Poly1305.
-- The DM inner envelope is signed and bound to `from`, `to`, `ts`, `msgId`,
-  and body.
-- History records are encrypted and bound to a hashed conversation filename.
-- No message content is written unencrypted.
-- The Nym dependency set is pinned in `Cargo.lock`; the current 1.22.x patch
-  line is internally inconsistent. Do not run `cargo update` without testing
-  `--features nym`.
-- `nysiris-transport-nym` also pins every Nym crate to its locked version inside
-  the `nym` feature, so consumers — and anything that resolves from scratch —
-  get the buildable 1.22.0 set: `nym-client-core` 1.22.2 needs the yanked
-  `tokio_with_wasm` 0.10.1, and the 1.22.1 fallback does not compile against
-  the 1.22.2 `nym-crypto` / `nym-client-core-config-types` siblings.
-  `scripts/check-nym-pins.sh` fails if that resolve ever drifts. CI still builds
-  with `--locked`, and the API-compatibility job checks default features only
-  (cargo-semver-checks resolves in a throwaway project; the public API surface
-  is the same with or without `nym`).
-
-## Security
-
-See `SECURITY.md` for private reporting and scope reminders.
+Start in Discussions if you are unsure where something belongs. Keep secrets and
+message content out of every channel, and read `AGENTS.md` before proposing
+protocol changes.
 
 ## License
 
-Apache-2.0. See `LICENSE`.
+Apache-2.0. See [`LICENSE`](LICENSE).
