@@ -37,7 +37,7 @@ OS keychain integration and crates.io publication are next. Crates are
 Releases are cut by tagging the workspace version:
 
 ```bash
-git tag v0.1.1 && git push origin v0.1.1
+git tag v0.1.2 && git push origin v0.1.2
 ```
 
 `.github/workflows/release.yml` verifies the tag against
