@@ -282,6 +282,11 @@ impl ChatEngine {
         let inner_json = String::from_utf8(plain)
             .map_err(|_| CoreError::InvalidInput("DM inner is not UTF-8".into()))?;
         let inner = unpack_dm_inner(&inner_json, &self.identity.public_hex())?;
+        if self.contact(&inner.from).is_none() {
+            return Err(CoreError::InvalidInput(
+                "DM sender is not a saved contact".into(),
+            ));
+        }
 
         let message =
             ChatMessage::incoming(&inner.from, &inner.to, &inner.msg_id, &inner.body, inner.ts);
@@ -312,6 +317,15 @@ impl ChatEngine {
             .ok_or_else(|| CoreError::NotFound("room is not known on this device".into()))?;
         let inner_json = open_group(&group.key, &sealed)?;
         let inner = unpack_group_inner(&inner_json, &group.id)?;
+        if !group
+            .members
+            .iter()
+            .any(|member| member.pubkey == inner.from)
+        {
+            return Err(CoreError::InvalidInput(
+                "room sender is not in the local roster".into(),
+            ));
+        }
         let message = ChatMessage::incoming_group(
             &inner.from,
             &group.id,
@@ -498,10 +512,24 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let (mut bob, _) = engine(2, &dir);
         let alice = ChatIdentity::from_secret_bytes([1u8; 32]);
+        bob.add_contact(Contact::new("Alice", &alice.public_hex(), "alice.enc@gw").unwrap());
         bob.deliver_demo(&alice, "once").unwrap();
 
         let msg = bob.history_for(&alice.public_hex(), 0).remove(0);
         assert!(bob.history().contains(&msg.msg_id));
+    }
+
+    #[test]
+    fn unknown_dm_senders_are_rejected() {
+        let dir = TempDir::new().unwrap();
+        let (mut bob, _) = engine(2, &dir);
+        let alice = ChatIdentity::from_secret_bytes([1u8; 32]);
+
+        assert!(bob.deliver_demo(&alice, "unsolicited").is_err());
+        assert!(bob.history_for(&alice.public_hex(), 0).is_empty());
+
+        bob.add_contact(Contact::new("Alice", &alice.public_hex(), "alice.enc@gw").unwrap());
+        assert!(bob.deliver_demo(&alice, "hello").unwrap().is_some());
     }
 
     #[test]
@@ -540,6 +568,10 @@ mod tests {
         let joined = bob.join_group(&invite).unwrap();
         assert_eq!(joined.id, group.id);
         assert_eq!(bob.group_summaries().len(), 1);
+
+        let carol = ChatIdentity::from_secret_bytes([3u8; 32]);
+        assert!(bob.deliver_demo_group(&carol, &group.id, "spoof").is_err());
+        assert!(bob.group_history(&group.id, 0).is_empty());
 
         let report = alice.send_group(&group.id, "hello room").unwrap();
         assert_eq!(report.delivered, 1);

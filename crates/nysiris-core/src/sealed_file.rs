@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::ffi::OsString;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use chacha20poly1305::{
     aead::{Aead, Payload},
@@ -57,16 +60,90 @@ pub fn open_bytes(key: &[u8; 32], aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>> 
         .map_err(|_| CoreError::Crypto("sealed file could not be opened".into()))
 }
 
-/// Write a sealed blob. This is intentionally a simple overwrite for phase 0;
-/// replace with an atomic rename + fsync before production.
+/// Write a sealed blob atomically.
+///
+/// The new contents are written to a temporary sibling, flushed to disk, and
+/// then moved into place. The previous contents are retained as `<name>.bak`
+/// so a crash between the two renames can be recovered by [`read_sealed`].
 pub fn write_sealed(path: &Path, key: &[u8; 32], aad: &[u8], plaintext: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
     let sealed = seal_bytes(key, aad, plaintext)?;
-    std::fs::write(path, sealed)?;
+    write_atomic(path, &sealed)
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    std::fs::create_dir_all(parent)?;
+
+    let temp = temporary_path(path);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temp)?;
+    if let Err(err) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+        drop(file);
+        let _ = std::fs::remove_file(&temp);
+        return Err(err.into());
+    }
+    drop(file);
+
+    let backup = backup_path(path);
+    if path.exists() {
+        let _ = std::fs::remove_file(&backup);
+        if let Err(err) = std::fs::rename(path, &backup) {
+            let _ = std::fs::remove_file(&temp);
+            return Err(err.into());
+        }
+    }
+    if let Err(err) = std::fs::rename(&temp, path) {
+        let _ = std::fs::remove_file(&temp);
+        if backup.exists() {
+            let _ = std::fs::rename(&backup, path);
+        }
+        return Err(err.into());
+    }
+
     restrict_permissions(path);
+    sync_directory(parent);
     Ok(())
+}
+
+fn temporary_path(path: &Path) -> PathBuf {
+    let mut random = [0u8; 8];
+    rand::rngs::OsRng.fill_bytes(&mut random);
+    let mut name = OsString::from(".");
+    name.push(path.file_name().unwrap_or_default());
+    name.push(format!(
+        ".{}.{}.tmp",
+        std::process::id(),
+        u64::from_le_bytes(random)
+    ));
+    path.with_file_name(name)
+}
+
+fn backup_path(path: &Path) -> PathBuf {
+    let mut name = OsString::from(path.file_name().unwrap_or_default());
+    name.push(".bak");
+    path.with_file_name(name)
+}
+
+fn sync_directory(path: &Path) {
+    #[cfg(unix)]
+    {
+        if let Ok(directory) = std::fs::File::open(path) {
+            let _ = directory.sync_all();
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
 }
 
 fn restrict_permissions(path: &Path) {
@@ -82,9 +159,36 @@ fn restrict_permissions(path: &Path) {
 }
 
 /// Read and open a sealed blob written by [`write_sealed`].
+///
+/// If the primary file is missing or unreadable and a `<name>.bak` sibling
+/// validates with the same key/AAD, that backup is used and copied back into
+/// place. A wrong key never succeeds because both copies fail to open.
 pub fn read_sealed(path: &Path, key: &[u8; 32], aad: &[u8]) -> Result<Vec<u8>> {
-    let sealed = std::fs::read(path)?;
-    open_bytes(key, aad, &sealed)
+    let primary = read_sealed_file(path, key, aad);
+    if primary.is_ok() {
+        return primary;
+    }
+
+    let backup = backup_path(path);
+    if !backup.is_file() {
+        return primary;
+    }
+    match read_sealed_file(&backup, key, aad) {
+        Ok(bytes) => {
+            // Best-effort restore; callers still get the recovered plaintext.
+            let _ = std::fs::copy(&backup, path);
+            restrict_permissions(path);
+            Ok(bytes)
+        }
+        Err(_) => primary,
+    }
+}
+
+fn read_sealed_file(path: &Path, key: &[u8; 32], aad: &[u8]) -> Result<Vec<u8>> {
+    match std::fs::read(path) {
+        Ok(sealed) => open_bytes(key, aad, &sealed),
+        Err(err) => Err(err.into()),
+    }
 }
 
 #[cfg(test)]
@@ -98,5 +202,41 @@ mod tests {
         assert!(!sealed.windows(5).any(|w| w == b"hello"));
         assert_eq!(open_bytes(&key, b"label", &sealed).unwrap(), b"hello");
         assert!(open_bytes(&key, b"other", &sealed).is_err());
+    }
+
+    #[test]
+    fn atomic_write_keeps_previous_generation_and_recovers_it() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("contacts.enc");
+        let key = [7u8; 32];
+
+        write_sealed(&path, &key, b"contacts", b"first").unwrap();
+        write_sealed(&path, &key, b"contacts", b"second").unwrap();
+        assert_eq!(read_sealed(&path, &key, b"contacts").unwrap(), b"second");
+        assert!(path.with_file_name("contacts.enc.bak").is_file());
+
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(read_sealed(&path, &key, b"contacts").unwrap(), b"first");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            std::fs::read(path.with_file_name("contacts.enc.bak")).unwrap()
+        );
+    }
+
+    #[test]
+    fn wrong_key_still_fails_with_a_backup_present() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("groups.enc");
+        write_sealed(&path, &[7u8; 32], b"groups", b"secret").unwrap();
+        write_sealed(&path, &[7u8; 32], b"groups", b"newer").unwrap();
+        assert!(read_sealed(&path, &[8u8; 32], b"groups").is_err());
+    }
+
+    #[test]
+    fn missing_file_error_is_preserved() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("identity.enc");
+        let err = read_sealed(&path, &[7u8; 32], b"identity").unwrap_err();
+        assert!(matches!(err, CoreError::Io(err) if err.kind() == std::io::ErrorKind::NotFound));
     }
 }

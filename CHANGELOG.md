@@ -4,6 +4,24 @@ Notable changes to the Nysiris-Core crates. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are the workspace
 version and the matching annotated tag.
 
+## [Unreleased]
+
+### Added
+
+- Atomic sealed-file replacement with a previous-generation `.bak` file and
+  automatic recovery when the primary file is missing or corrupt.
+- Inbound sender authorization: DMs require a saved contact and room messages
+  require a key in the local roster.
+- Regression tests for sealed-file recovery, truncated history repair, and
+  inbound sender checks.
+
+### Changed
+
+- History journals quarantine a torn trailing record as `*.corrupt` and keep
+  every complete record before it.
+- `dev-master.key` is created with `create_new` and is never overwritten when
+  unreadable or malformed.
+
 ## [0.1.3] - 2026-10-25
 
 ### Added

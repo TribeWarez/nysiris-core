@@ -186,7 +186,6 @@ fn run(
                 .map_err(|e| format!("Nym connect failed: {e}"))?;
 
             let address = client.nym_address().to_string();
-            eprintln!("ncc-daemon: Nym address {address}");
             let sender = client.split_sender();
             if ready.send(Ok(address)).is_err() {
                 client.disconnect().await;

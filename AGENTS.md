@@ -85,5 +85,5 @@ That is a CI/test relationship, not a Cargo dependency.
   protocol implementation, not a substitute for an audit.
 - `dev-master.key` is an NCC-side development fallback, not part of this repo.
 - Do not log message content, keys, or contact lists.
-- `sealed_file` writes currently use a simple overwrite; add atomic rename +
-  fsync before production.
+- `sealed_file` writes are atomic (temporary sibling + fsync + rename) and keep
+  a `.bak` previous generation. Keep that behavior when changing storage code.

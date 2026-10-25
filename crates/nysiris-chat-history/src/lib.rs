@@ -187,11 +187,11 @@ fn load_file(path: &Path, key: &[u8; 32]) -> Result<Vec<ChatMessage>> {
 
     let mut offset = 0usize;
     let mut out = Vec::new();
+    let mut truncated_at: Option<usize> = None;
     while offset < bytes.len() {
         if bytes.len() - offset < 4 {
-            return Err(CoreError::History(format!(
-                "truncated record header in {name}"
-            )));
+            truncated_at = Some(offset);
+            break;
         }
         let len = u32::from_be_bytes([
             bytes[offset],
@@ -199,9 +199,16 @@ fn load_file(path: &Path, key: &[u8; 32]) -> Result<Vec<ChatMessage>> {
             bytes[offset + 2],
             bytes[offset + 3],
         ]) as usize;
+        let record_start = offset;
         offset += 4;
-        if len == 0 || len > MAX_RECORD_BYTES || bytes.len() - offset < len {
+        if len == 0 || len > MAX_RECORD_BYTES {
             return Err(CoreError::History(format!("bad record length in {name}")));
+        }
+        if bytes.len() - offset < len {
+            // A crash between the length header and the payload leaves a
+            // truncated tail. Keep every complete record before it.
+            truncated_at = Some(record_start);
+            break;
         }
         let plain = open_bytes(key, aad, &bytes[offset..offset + len])?;
         offset += len;
@@ -215,7 +222,33 @@ fn load_file(path: &Path, key: &[u8; 32]) -> Result<Vec<ChatMessage>> {
         }
         out.push(message);
     }
+
+    if let Some(valid_len) = truncated_at {
+        quarantine_tail(path, &bytes[valid_len..], valid_len)?;
+    }
     Ok(out)
+}
+
+fn quarantine_tail(path: &Path, tail: &[u8], valid_len: usize) -> Result<()> {
+    let corrupt = path.with_extension("corrupt");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&corrupt)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+    }
+    file.write_all(tail)?;
+    file.flush()?;
+    file.sync_data()?;
+    drop(file);
+
+    let journal = OpenOptions::new().write(true).open(path)?;
+    journal.set_len(valid_len as u64)?;
+    journal.sync_all()?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -262,5 +295,27 @@ mod tests {
         let mut history = History::open(dir.path(), [7u8; 32]).unwrap();
         history.append(&message("01", "hello")).unwrap();
         assert!(History::open(dir.path(), [8u8; 32]).is_err());
+    }
+
+    #[test]
+    fn truncated_tail_is_quarantined_and_complete_records_survive() {
+        let dir = TempDir::new().unwrap();
+        let key = [7u8; 32];
+        let mut history = History::open(dir.path(), key).unwrap();
+        history.append(&message("01", "hello")).unwrap();
+        history.append(&message("02", "world")).unwrap();
+
+        let path = dir.path().join(file_name("dm:aabb"));
+        let valid_len = std::fs::metadata(&path).unwrap().len();
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(&[0u8, 0u8]).unwrap();
+        file.sync_all().unwrap();
+
+        let reopened = History::open(dir.path(), key).unwrap();
+        let rows = reopened.list("dm:aabb", 0);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[1].body, "world");
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), valid_len);
+        assert!(path.with_extension("corrupt").is_file());
     }
 }
