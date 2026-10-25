@@ -57,7 +57,7 @@ service side. Do not add them here until the extraction happens.
   `scripts/check-nym-pins.sh` (CI job `nym-pins`, resolution only, no build)
   fails if a from-scratch resolve drifts; keep the pins and `Cargo.lock` in
   step, and pass `--locked` for real builds.
-- `0.1.2` is published on crates.io. Each release tag publishes every crate in
+- `0.1.x` is published on crates.io. Each release tag publishes every crate in
   dependency order and is gated on the `CORE_PUBLISH_ENABLED` repository
   variable. Do not publish a placeholder version; crates.io versions are
   immutable, so a metadata or README fix needs a new version.

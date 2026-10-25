@@ -4,7 +4,7 @@ Notable changes to the Nysiris-Core crates. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are the workspace
 version and the matching annotated tag.
 
-## [Unreleased]
+## [0.1.3] - 2026-10-25
 
 ### Added
 
@@ -18,11 +18,13 @@ version and the matching annotated tag.
 
 - `README.md`, `AGENTS.md`, and `CONTRIBUTING.md` describe the published `0.1.x`
   line, annotated tags, and the `--locked` release gate.
+- Doc builds run with `RUSTDOCFLAGS=-D warnings` in CI and release, so broken
+  intra-doc links and missing public docs fail the gate.
 
 ### Notes
 
 - crates.io versions are immutable: this documentation and metadata reach the
-  registry with the next published version, not by editing `0.1.2`.
+  registry with this release, not by editing `0.1.2`.
 
 ## [0.1.2] - 2026-10-25
 
