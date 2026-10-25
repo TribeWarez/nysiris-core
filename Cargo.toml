@@ -9,19 +9,20 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/TribeWarez/nysiris-core"
 rust-version = "1.85"
-publish = false
 
+# Every workspace-internal dependency must carry a registry version alongside
+# its path so `cargo package`/`cargo publish` can rewrite it for consumers.
 [workspace.dependencies]
-nysiris-core = { path = "crates/nysiris-core" }
-nysiris-chat-history = { path = "crates/nysiris-chat-history" }
-nysiris-chat-core = { path = "crates/nysiris-chat-core" }
-nysiris-transport-nym = { path = "crates/nysiris-transport-nym" }
-nysiris-testkit = { path = "crates/nysiris-testkit" }
+nysiris-core = { version = "0.1.1", path = "crates/nysiris-core" }
+nysiris-chat-history = { version = "0.1.1", path = "crates/nysiris-chat-history" }
+nysiris-chat-core = { version = "0.1.1", path = "crates/nysiris-chat-core" }
+nysiris-transport-nym = { version = "0.1.1", path = "crates/nysiris-transport-nym" }
+nysiris-testkit = { version = "0.1.1", path = "crates/nysiris-testkit" }
 
 blake2 = "0.10"
 chacha20poly1305 = "0.10"

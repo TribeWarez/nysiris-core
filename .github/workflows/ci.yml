@@ -39,3 +39,32 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check nym feature
         run: cargo check -p nysiris-transport-nym --features nym
+
+  semver:
+    name: API compatibility (semver)
+    runs-on: ubuntu-latest
+    steps:
+      # Full history is needed to resolve the pre-tag baseline commit.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Find previous release tag
+        id: baseline
+        run: |
+          # Compare against the newest v* tag reachable from the parent commit.
+          # Before the first release there is no baseline to compare against.
+          rev="$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)"
+          if [ -z "$rev" ]; then
+            echo "::notice::no earlier v* tag reachable; skipping API compatibility check"
+          fi
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+      # The crates are not on crates.io yet, so the default registry baseline
+      # would not resolve. Pin the git baseline explicitly; the action checks
+      # every crate in the workspace manifest.
+      - name: cargo semver-checks against the previous tag
+        if: steps.baseline.outputs.rev != ''
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          baseline-rev: ${{ steps.baseline.outputs.rev }}
+          manifest-path: Cargo.toml
+

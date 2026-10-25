@@ -5354,7 +5354,7 @@ dependencies = [
 
 [[package]]
 name = "nysiris-chat-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hex",
  "nysiris-chat-history",
@@ -5369,7 +5369,7 @@ dependencies = [
 
 [[package]]
 name = "nysiris-chat-history"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blake2 0.10.6",
  "chacha20poly1305",
@@ -5383,7 +5383,7 @@ dependencies = [
 
 [[package]]
 name = "nysiris-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blake2 0.10.6",
  "chacha20poly1305",
@@ -5398,7 +5398,7 @@ dependencies = [
 
 [[package]]
 name = "nysiris-testkit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "nysiris-core",
  "serde_json",
@@ -5406,7 +5406,7 @@ dependencies = [
 
 [[package]]
 name = "nysiris-transport-nym"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "nym-sdk",
  "nysiris-core",

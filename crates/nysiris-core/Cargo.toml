@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-publish = false
 description = "Shared primitives for Nysiris native clients: identity, message framing, crypto, contacts, and transport traits."
 
 [dependencies]

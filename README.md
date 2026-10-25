@@ -32,6 +32,38 @@ Phase 0 walking skeleton:
 OS keychain integration and crates.io publication are next. Crates are
 `publish = false` until the API stabilizes.
 
+## Releasing
+
+Releases are cut by tagging the workspace version:
+
+```bash
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+`.github/workflows/release.yml` verifies the tag against
+`[workspace.package].version`, re-runs the full gate (fmt, clippy, tests, docs,
+Nym feature compile), validates the packaged file lists, and creates a GitHub
+release. crates.io publication runs in dependency order and is gated on the
+`CORE_PUBLISH_ENABLED` repository variable plus a `CARGO_REGISTRY_TOKEN` secret
+bound to the `crates-io` environment:
+
+```bash
+gh variable set CORE_PUBLISH_ENABLED --repo TribeWarez/nysiris-core --body true
+gh secret set CARGO_REGISTRY_TOKEN --repo TribeWarez/nysiris-core
+```
+
+Or run `./scripts/configure-github.ps1 -EnablePublish` once; it also installs the
+Nysiris Android signing secrets and creates the `crates-io` environment.
+
+crates.io versions are immutable, so the publish job skips versions that already
+exist and a failed release can be re-run. A dependent crate can only be
+`cargo package`d after its dependency is on crates.io, so `cargo publish`
+performs the verified build per crate, in dependency order.
+
+The existing `v0.1.0` tag predates publish enablement and is already pinned by
+NCC's submodule. For the first published release, bump the workspace version and
+tag the new commit rather than moving `v0.1.0`.
+
 ## Verify
 
 ```bash

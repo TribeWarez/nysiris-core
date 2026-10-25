@@ -5,7 +5,6 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-publish = false
 description = "Nym transport adapter for Nysiris native clients. The real nym-sdk adapter is behind the nym feature and was verified on mainnet; default builds use an explicit unavailable stub."
 
 [features]
@@ -15,5 +14,9 @@ nym = ["dep:nym-sdk", "dep:tokio"]
 [dependencies]
 nysiris-core.workspace = true
 thiserror.workspace = true
-nym-sdk = { version = "1.21", optional = true }
+# nym-sdk is versioned independently of the other nym-* crates (the 1.22.0
+# line covers the siblings). Pin the mainnet-verified release exactly so a
+# fresh resolve cannot drift to a later 1.21.x/1.22.x; bump deliberately and
+# re-run `cargo check --features nym`.
+nym-sdk = { version = "=1.21.6", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"], optional = true }

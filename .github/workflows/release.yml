@@ -1,0 +1,237 @@
+name: Release
+
+# Tag-driven release for the crates.io publication target.
+#
+#   git tag v0.1.1 && git push origin v0.1.1
+#
+# Two gates keep this safe while the API is still stabilizing:
+#
+#   1. `package` inspects the manifests and only enables packaging when the
+#      crates are actually publishable: `publish = false` removed AND every
+#      workspace-internal dependency carries a registry `version` (a path-only
+#      dependency makes `cargo package`/`publish` fail by design). Until then
+#      the workflow still verifies the tree and cuts a GitHub release.
+#   2. `publish` additionally requires the CORE_PUBLISH_ENABLED repository
+#      variable to be `true`, plus CARGO_REGISTRY_TOKEN bound to the
+#      `crates-io` environment. crates.io versions are immutable, so the
+#      default behaviour is dry-run only.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Publish order: every crate after the first depends on one before it.
+  # testkit is placed before chat-core because chat-core dev-depends on it;
+  # dev-dependencies are not needed at publish time, but this order keeps the
+  # graph acyclic even for tooling that walks dev-deps.
+  CRATE_ORDER: nysiris-core nysiris-chat-history nysiris-testkit nysiris-chat-core nysiris-transport-nym
+
+jobs:
+  version:
+    name: Tag matches workspace version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read workspace version and verify the tag
+        id: version
+        run: |
+          version="$(awk '
+            /^\[workspace\.package\]/ { in_pkg = 1; next }
+            /^\[/ { in_pkg = 0 }
+            in_pkg && /^version[[:space:]]*=/ { gsub(/[",]/, "", $3); print $3; exit }
+          ' Cargo.toml)"
+          if [ -z "$version" ]; then
+            echo "::error::could not read version from [workspace.package]"
+            exit 1
+          fi
+
+          # Published crates must inherit the workspace version so tag, release
+          # notes, and crates.io never disagree.
+          missing="$(grep -L '^version\.workspace = true' crates/*/Cargo.toml || true)"
+          if [ -n "$missing" ]; then
+            echo "::error::these crates do not inherit the workspace version:"
+            echo "$missing"
+            exit 1
+          fi
+
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$version" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match workspace version $version"
+              exit 1
+            fi
+            echo "tag $GITHUB_REF_NAME matches workspace version $version"
+          else
+            echo "::notice::manual run on $GITHUB_REF: no tag to verify"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  check:
+    name: Checks (must pass)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-release-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: Docs
+        run: cargo doc --workspace --no-deps
+
+  nym-transport:
+    name: Nym transport compile
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-release-nym-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Check nym feature
+        run: cargo check -p nysiris-transport-nym --features nym
+
+  package:
+    name: Validate packaging
+    needs: [check, nym-transport]
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.readiness.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check whether the crates are publishable
+        id: readiness
+        run: |
+          ready=true
+          reasons=""
+          if grep -lq '^publish = false' crates/*/Cargo.toml; then
+            ready=false
+            reasons="${reasons}publish = false is still set; "
+          fi
+          if grep -Eq '^nysiris-[a-z-]+ = \{[^}]*path = ' Cargo.toml &&
+            grep -E '^nysiris-[a-z-]+ = \{[^}]*path = ' Cargo.toml | grep -vq 'version = '; then
+            ready=false
+            reasons="${reasons}workspace dependencies still lack a registry version; "
+          fi
+          if [ "$ready" = true ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::crates are publishable; packaging validated, publish job armed"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::crates.io steps skipped: ${reasons}crates are not published yet"
+          fi
+      - name: Validate manifests and package file lists
+        if: steps.readiness.outputs.ready == 'true'
+        run: |
+          # A full `cargo package` of a dependent crate needs its dependency to
+          # already exist on crates.io, which is only true mid-publish (and
+          # never for a first release). Validate resolution and the packaged
+          # file list here; `cargo publish` performs the verified build per
+          # crate, in dependency order, once its dependencies are on the index.
+          cargo metadata --locked --format-version 1 > /dev/null
+          for crate in $CRATE_ORDER; do
+            cargo package -p "$crate" --list --no-verify > /dev/null
+            echo "ok: $crate"
+          done
+
+  publish:
+    name: Publish to crates.io
+    needs: [version, package]
+    # Tag-only, ready-only, and behind an explicit repository opt-in.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.package.outputs.ready == 'true' &&
+      vars.CORE_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN is not set; bind it to the crates-io environment"
+            exit 1
+          fi
+
+          # crates.io has no transactions: each crate must be visible before
+          # its dependents can be published, and a re-run must not fail on the
+          # versions that already landed.
+          for crate in $CRATE_ORDER; do
+            status="$(curl -s -o /dev/null -w '%{http_code}' \
+              -H 'User-Agent: nysiris-release-ci' \
+              "https://crates.io/api/v1/crates/$crate/$VERSION")"
+            case "$status" in
+              200)
+                echo "::notice::$crate $VERSION is already published; skipping"
+                continue
+                ;;
+              404)
+                ;;
+              *)
+                echo "::error::unexpected crates.io status $status for $crate $VERSION"
+                exit 1
+                ;;
+            esac
+
+            echo "::group::cargo publish -p $crate"
+            cargo publish -p "$crate" --locked
+            echo "::endgroup::"
+            # Give the sparse index a moment before publishing dependents.
+            sleep 30
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crates
+          path: target/package/*.crate
+          if-no-files-found: ignore
+
+  github-release:
+    name: Publish GitHub release
+    needs: [version, package]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
