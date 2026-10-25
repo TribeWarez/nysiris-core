@@ -105,4 +105,7 @@ Ask questions and talk through design in the repository
 issues for reproducible bugs and concrete proposals. Questions about the client
 UI belong in [TribeWarez/ncc](https://github.com/TribeWarez/ncc); Nym network and
 SDK questions belong upstream at [nymtech.net](https://nymtech.net). If this
-work is useful to you, you can [sponsor it](https://github.com/sponsors/TribeWarez).
+work is useful to you, you can sponsor it on
+[GitHub Sponsors](https://github.com/sponsors/TribeWarez),
+[Patreon](https://www.patreon.com/TribeWarez), or
+[Ko-fi](https://ko-fi.com/tribewarez).

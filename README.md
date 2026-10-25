@@ -196,7 +196,7 @@ commit rather than moving it. A tag only reaches crates.io once the tag matches
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history and what changed |
 | [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting |
 | [`AGENTS.md`](AGENTS.md) | Scope rules for human and AI contributors |
-| [Sponsor](https://github.com/sponsors/TribeWarez) | Fund maintenance of the protocol crates |
+| [Sponsor](https://github.com/sponsors/TribeWarez) · [Patreon](https://www.patreon.com/TribeWarez) · [Ko-fi](https://ko-fi.com/tribewarez) | Fund maintenance of the protocol crates |
 | [TribeWarez/ncc](https://github.com/TribeWarez/ncc) | The PySide6 client that consumes the chat crates; UI issues belong there |
 | [nymtech.net](https://nymtech.net) · [nymtech/nym](https://github.com/nymtech/nym) | Upstream Nym network, SDK, and docs |
 
