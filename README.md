@@ -1,5 +1,7 @@
 # Nysiris-Core
 
+![Nysiris-Core: shared Rust crates for Nysiris-native chat](.github/social.png)
+
 [![CI](https://github.com/TribeWarez/nysiris-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TribeWarez/nysiris-core/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-blue.svg)](#requirements)
@@ -8,6 +10,10 @@
 Shared Rust crates for Nysiris-native clients and services: chat identities, a
 signed DM envelope, encrypted local history, a transport-agnostic chat engine,
 and a real [Nym](https://nymtech.net) transport adapter.
+
+**Project docs:** [Contributing](CONTRIBUTING.md) ·
+[Security policy](SECURITY.md) · [Changelog](CHANGELOG.md) ·
+[Funding](https://github.com/sponsors/TribeWarez) · [Agent rules](AGENTS.md)
 
 Nysiris-Core is the middle of the dependency graph. It must not depend on
 Nysiris or NCC — both consume it:
@@ -203,6 +209,19 @@ commit rather than moving it. A tag only reaches crates.io once the tag matches
 Start in Discussions if you are unsure where something belongs. Keep secrets and
 message content out of every channel, and read `AGENTS.md` before proposing
 protocol changes.
+
+## Funding
+
+Nysiris-Core is maintained in the open. If it is useful to you, you can support
+it through any of the channels listed in
+[`.github/FUNDING.yml`](.github/FUNDING.yml):
+
+- [GitHub Sponsors](https://github.com/sponsors/TribeWarez)
+- [Patreon](https://www.patreon.com/TribeWarez)
+- [Ko-fi](https://ko-fi.com/tribewarez)
+
+Sponsorship pays for review time and live Nym test runs. It does not buy
+protocol changes, priority support, or influence over the security model.
 
 ## License
 
