@@ -9,7 +9,87 @@ description = "Nym transport adapter for Nysiris native clients. The real nym-sd
 
 [features]
 default = []
-nym = ["dep:nym-sdk", "dep:tokio"]
+nym = [
+    "dep:nym-sdk",
+    "dep:tokio",
+    "dep:nym-api-requests",
+    "dep:nym-bandwidth-controller",
+    "dep:nym-bandwidth-fetcher",
+    "dep:nym-bin-common",
+    "dep:nym-bls12_381-fork",
+    "dep:nym-client-core",
+    "dep:nym-client-core-config-types",
+    "dep:nym-client-core-gateways-storage",
+    "dep:nym-client-core-surb-storage",
+    "dep:nym-coconut-dkg-common",
+    "dep:nym-common",
+    "dep:nym-compact-ecash",
+    "dep:nym-config",
+    "dep:nym-contracts-common",
+    "dep:nym-credentials",
+    "dep:nym-credentials-interface",
+    "dep:nym-credential-storage",
+    "dep:nym-crypto",
+    "dep:nym-directory-attestation",
+    "dep:nym-directory-contract-common",
+    "dep:nym-ecash-contract-common",
+    "dep:nym-ecash-signer-check-types",
+    "dep:nym-ecash-time",
+    "dep:nym-exit-policy",
+    "dep:nym-gateway-client",
+    "dep:nym-gateway-requests",
+    "dep:nym-geolocation-contract-common",
+    "dep:nym-group-contract-common",
+    "dep:nym-http-api-client",
+    "dep:nym-http-api-client-macro",
+    "dep:nym-http-api-common",
+    "dep:nym-id",
+    "dep:nym-ip-packet-requests",
+    "dep:nym-kkt-ciphersuite",
+    "dep:nym-lp-data",
+    "dep:nym-lthash",
+    "dep:nym-metrics",
+    "dep:nym-mixnet-client",
+    "dep:nym-mixnet-contract-common",
+    "dep:nym-multisig-contract-common",
+    "dep:nym-network-defaults",
+    "dep:nym-network-monitors-contract-common",
+    "dep:nym-node-families-contract-common",
+    "dep:nym-node-requests",
+    "dep:nym-noise",
+    "dep:nym-noise-keys",
+    "dep:nym-nonexhaustive-delayqueue",
+    "dep:nym-ordered-buffer",
+    "dep:nym-pemstore",
+    "dep:nym-performance-contract-common",
+    "dep:nym-serde-helpers",
+    "dep:nym-service-provider-requests-common",
+    "dep:nym-service-providers-common",
+    "dep:nym-socks5-client-core",
+    "dep:nym-socks5-proxy-helpers",
+    "dep:nym-socks5-requests",
+    "dep:nym-sphinx",
+    "dep:nym-sphinx-acknowledgements",
+    "dep:nym-sphinx-addressing",
+    "dep:nym-sphinx-anonymous-replies",
+    "dep:nym-sphinx-chunking",
+    "dep:nym-sphinx-cover",
+    "dep:nym-sphinx-forwarding",
+    "dep:nym-sphinx-framing",
+    "dep:nym-sphinx-params",
+    "dep:nym-sphinx-routing",
+    "dep:nym-sphinx-types",
+    "dep:nym-sqlx-pool-guard",
+    "dep:nym-statistics-common",
+    "dep:nym-task",
+    "dep:nym-ticketbooks-merkle",
+    "dep:nym-topology",
+    "dep:nym-upgrade-mode-check",
+    "dep:nym-validator-client",
+    "dep:nym-vesting-contract-common",
+    "dep:nym-wasm-utils",
+    "dep:nym-wireguard-types"
+]
 
 [dependencies]
 nysiris-core.workspace = true
@@ -20,3 +100,99 @@ thiserror.workspace = true
 # re-run `cargo check --features nym`.
 nym-sdk = { version = "=1.21.6", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"], optional = true }
+# ---------------------------------------------------------------------------
+# RESOLUTION-ONLY NYM PINS. No code in this crate uses them: they are listed
+# in the `nym` feature purely so their exact version requirements join the
+# resolve whenever a consumer enables that feature. They are already in
+# nym-sdk's tree, so this adds no extra compilation.
+#
+# The Nym 1.22.x patch line on crates.io is internally inconsistent:
+# nym-client-core 1.22.2 requires the yanked tokio_with_wasm 0.10.1, so a
+# from-scratch resolve falls back to nym-client-core 1.22.1, which does not
+# compile against the 1.22.2 nym-crypto / nym-client-core-config-types
+# siblings. Without these pins, anyone building this crate from crates.io
+# (no Cargo.lock of ours to lean on) gets that unbuildable graph.
+#
+# The exact pins below reproduce the mainnet-verified Cargo.lock set
+# (Nym 1.22.0, plus nym-sdk and nym-ip-packet-requests 1.21.6 as required by
+# nym-sdk 1.21.6). Cargo ignores optional deps that no enabled feature
+# references, so they must stay in `nym` rather than a private pin feature.
+# Bump them together with Cargo.lock and re-run scripts/check-nym-pins.sh.
+# ---------------------------------------------------------------------------
+nym-api-requests = { version = "=1.22.0", optional = true }
+nym-bandwidth-controller = { version = "=1.22.0", optional = true }
+nym-bandwidth-fetcher = { version = "=1.22.0", optional = true }
+nym-bin-common = { version = "=1.22.0", optional = true }
+nym-bls12_381-fork = { version = "=0.8.0-forked", optional = true }
+nym-client-core = { version = "=1.22.0", optional = true }
+nym-client-core-config-types = { version = "=1.22.0", optional = true }
+nym-client-core-gateways-storage = { version = "=1.22.0", optional = true }
+nym-client-core-surb-storage = { version = "=1.22.0", optional = true }
+nym-coconut-dkg-common = { version = "=1.22.0", optional = true }
+nym-common = { version = "=1.22.0", optional = true }
+nym-compact-ecash = { version = "=1.22.0", optional = true }
+nym-config = { version = "=1.22.0", optional = true }
+nym-contracts-common = { version = "=1.22.0", optional = true }
+nym-credentials = { version = "=1.22.0", optional = true }
+nym-credentials-interface = { version = "=1.22.0", optional = true }
+nym-credential-storage = { version = "=1.22.0", optional = true }
+nym-crypto = { version = "=1.22.0", optional = true }
+nym-directory-attestation = { version = "=1.22.0", optional = true }
+nym-directory-contract-common = { version = "=1.22.0", optional = true }
+nym-ecash-contract-common = { version = "=1.22.0", optional = true }
+nym-ecash-signer-check-types = { version = "=1.22.0", optional = true }
+nym-ecash-time = { version = "=1.22.0", optional = true }
+nym-exit-policy = { version = "=1.22.0", optional = true }
+nym-gateway-client = { version = "=1.22.0", optional = true }
+nym-gateway-requests = { version = "=1.22.0", optional = true }
+nym-geolocation-contract-common = { version = "=1.22.0", optional = true }
+nym-group-contract-common = { version = "=1.22.0", optional = true }
+nym-http-api-client = { version = "=1.22.0", optional = true }
+nym-http-api-client-macro = { version = "=1.22.0", optional = true }
+nym-http-api-common = { version = "=1.22.0", optional = true }
+nym-id = { version = "=1.22.0", optional = true }
+nym-ip-packet-requests = { version = "=1.21.6", optional = true }
+nym-kkt-ciphersuite = { version = "=1.22.0", optional = true }
+nym-lp-data = { version = "=1.22.0", optional = true }
+nym-lthash = { version = "=1.22.0", optional = true }
+nym-metrics = { version = "=1.22.0", optional = true }
+nym-mixnet-client = { version = "=1.22.0", optional = true }
+nym-mixnet-contract-common = { version = "=1.22.0", optional = true }
+nym-multisig-contract-common = { version = "=1.22.0", optional = true }
+nym-network-defaults = { version = "=1.22.0", optional = true }
+nym-network-monitors-contract-common = { version = "=1.22.0", optional = true }
+nym-node-families-contract-common = { version = "=1.22.0", optional = true }
+nym-node-requests = { version = "=1.22.0", optional = true }
+nym-noise = { version = "=1.22.0", optional = true }
+nym-noise-keys = { version = "=1.22.0", optional = true }
+nym-nonexhaustive-delayqueue = { version = "=1.22.0", optional = true }
+nym-ordered-buffer = { version = "=1.22.0", optional = true }
+nym-pemstore = { version = "=1.22.0", optional = true }
+nym-performance-contract-common = { version = "=1.22.0", optional = true }
+nym-serde-helpers = { version = "=1.22.0", optional = true }
+nym-service-provider-requests-common = { version = "=1.22.0", optional = true }
+nym-service-providers-common = { version = "=1.22.0", optional = true }
+nym-socks5-client-core = { version = "=1.22.0", optional = true }
+nym-socks5-proxy-helpers = { version = "=1.22.0", optional = true }
+nym-socks5-requests = { version = "=1.22.0", optional = true }
+nym-sphinx = { version = "=1.22.0", optional = true }
+nym-sphinx-acknowledgements = { version = "=1.22.0", optional = true }
+nym-sphinx-addressing = { version = "=1.22.0", optional = true }
+nym-sphinx-anonymous-replies = { version = "=1.22.0", optional = true }
+nym-sphinx-chunking = { version = "=1.22.0", optional = true }
+nym-sphinx-cover = { version = "=1.22.0", optional = true }
+nym-sphinx-forwarding = { version = "=1.22.0", optional = true }
+nym-sphinx-framing = { version = "=1.22.0", optional = true }
+nym-sphinx-params = { version = "=1.22.0", optional = true }
+nym-sphinx-routing = { version = "=1.22.0", optional = true }
+nym-sphinx-types = { version = "=1.22.0", optional = true }
+nym-sqlx-pool-guard = { version = "=1.22.0", optional = true }
+nym-statistics-common = { version = "=1.22.0", optional = true }
+nym-task = { version = "=1.22.0", optional = true }
+nym-ticketbooks-merkle = { version = "=1.22.0", optional = true }
+nym-topology = { version = "=1.22.0", optional = true }
+nym-upgrade-mode-check = { version = "=1.22.0", optional = true }
+nym-validator-client = { version = "=1.22.0", optional = true }
+nym-vesting-contract-common = { version = "=1.22.0", optional = true }
+nym-wasm-utils = { version = "=1.22.0", optional = true }
+nym-wireguard-types = { version = "=1.22.0", optional = true }

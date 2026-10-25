@@ -68,9 +68,10 @@ tag the new commit rather than moving `v0.1.0`.
 
 ```bash
 cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo check -p nysiris-transport-nym --features nym   # heavy first build
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+bash scripts/check-nym-pins.sh   # from-scratch Nym resolve, no build
+cargo check -p nysiris-transport-nym --features nym --locked   # heavy first build
 ```
 
 ## Security notes
@@ -84,6 +85,15 @@ cargo check -p nysiris-transport-nym --features nym   # heavy first build
 - The Nym dependency set is pinned in `Cargo.lock`; the current 1.22.x patch
   line is internally inconsistent. Do not run `cargo update` without testing
   `--features nym`.
+- `nysiris-transport-nym` also pins every Nym crate to its locked version inside
+  the `nym` feature, so consumers — and anything that resolves from scratch —
+  get the buildable 1.22.0 set: `nym-client-core` 1.22.2 needs the yanked
+  `tokio_with_wasm` 0.10.1, and the 1.22.1 fallback does not compile against
+  the 1.22.2 `nym-crypto` / `nym-client-core-config-types` siblings.
+  `scripts/check-nym-pins.sh` fails if that resolve ever drifts. CI still builds
+  with `--locked`, and the API-compatibility job checks default features only
+  (cargo-semver-checks resolves in a throwaway project; the public API surface
+  is the same with or without `nym`).
 
 ## Security
 

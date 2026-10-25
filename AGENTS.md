@@ -46,6 +46,17 @@ service side. Do not add them here until the extraction happens.
 - The Nym 1.22.x patch line is internally inconsistent. `Cargo.lock` pins the
   known-good 1.22.0 set; do not regenerate it without testing
   `cargo check -p nysiris-transport-nym --features nym`.
+- The lockfile is load-bearing: a plain fresh resolve (`cargo update`, a new
+  build directory, `cargo-semver-checks`) selects `nym-client-core` 1.22.1 with
+  1.22.2 siblings, which does not compile (1.22.2 needs the yanked
+  `tokio_with_wasm` 0.10.1). `nysiris-transport-nym` therefore pins every Nym
+  crate to its locked version inside the `nym` feature, which is what makes
+  downstream `features = ["nym"]` builds resolve. Cargo ignores optional deps
+  that no enabled feature references, so the pins must stay in `nym` — a
+  separate private pin feature would be silently dropped.
+  `scripts/check-nym-pins.sh` (CI job `nym-pins`, resolution only, no build)
+  fails if a from-scratch resolve drifts; keep the pins and `Cargo.lock` in
+  step, and pass `--locked` for real builds.
 - All crates are `publish = false` until the API stabilizes. Do not publish a
   placeholder version; crates.io versions are immutable.
 - Keep consumer compatibility: Nysiris must not depend on
@@ -56,10 +67,11 @@ service side. Do not add them here until the extraction happens.
 
 ```bash
 cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo doc --workspace --no-deps
-cargo check -p nysiris-transport-nym --features nym   # heavy first build
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo doc --workspace --no-deps --locked
+bash scripts/check-nym-pins.sh   # from-scratch Nym resolve, no build
+cargo check -p nysiris-transport-nym --features nym --locked   # heavy first build
 ```
 
 For a consumer smoke test, build Nysiris and NCC against the changed crates.

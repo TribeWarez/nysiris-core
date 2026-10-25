@@ -99,12 +99,14 @@ jobs:
           key: ${{ runner.os }}-release-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Format
         run: cargo fmt --all -- --check
+      # --locked: Cargo.lock is what makes the Nym 1.22.x tree compilable; a
+      # fresh resolve picks 1.22.1/1.22.2, which do not compile together.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
       - name: Docs
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --workspace --no-deps --locked
 
   nym-transport:
     name: Nym transport compile
@@ -122,7 +124,7 @@ jobs:
             target
           key: ${{ runner.os }}-release-nym-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Check nym feature
-        run: cargo check -p nysiris-transport-nym --features nym
+        run: cargo check -p nysiris-transport-nym --features nym --locked
 
   package:
     name: Validate packaging
