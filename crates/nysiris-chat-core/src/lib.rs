@@ -451,6 +451,11 @@ impl ChatEngine {
     pub fn clear_history(&mut self) -> Result<()> {
         self.history.clear_all()
     }
+
+    /// Delete one conversation's journal and forget its messages.
+    pub fn clear_conversation(&mut self, conversation_id: &str) -> Result<()> {
+        self.history.clear_conversation(conversation_id)
+    }
 }
 
 #[cfg(test)]

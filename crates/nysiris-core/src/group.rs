@@ -6,7 +6,7 @@ use chacha20poly1305::{
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-use crate::contact::Contact;
+use crate::contact::{validate_nym_address, Contact};
 use crate::error::{CoreError, Result};
 use crate::identity::ChatIdentity;
 use crate::ids::{msg_id_bytes, normalize_pubkey_hex, now_ms, random_hex};
@@ -52,11 +52,7 @@ impl GroupMember {
             ));
         }
         let nym_address = nym_address.trim();
-        if nym_address.is_empty() || nym_address.chars().count() > 256 {
-            return Err(CoreError::InvalidInput(
-                "member Nym address is invalid".into(),
-            ));
-        }
+        validate_nym_address(nym_address)?;
         Ok(Self {
             petname: petname.to_string(),
             pubkey: normalize_pubkey_hex(pubkey)?,

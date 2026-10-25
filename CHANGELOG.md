@@ -4,6 +4,14 @@ Notable changes to the Nysiris-Core crates. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are the workspace
 version and the matching annotated tag.
 
+## [Unreleased]
+
+### Added
+
+- `ChatEngine::clear_conversation` for deleting one conversation's encrypted
+  journal.
+- Nym address shape validation for contacts and room members.
+
 ## [0.1.4] - 2026-10-25
 
 ### Added

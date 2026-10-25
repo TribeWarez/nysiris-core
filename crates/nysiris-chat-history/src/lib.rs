@@ -128,9 +128,14 @@ impl History {
 
     /// Delete one conversation's journal and forget its messages.
     pub fn clear_conversation(&mut self, conversation_id: &str) -> Result<()> {
-        let path = self.dir.join(file_name(conversation_id));
-        if path.exists() {
-            std::fs::remove_file(path)?;
+        for name in [
+            file_name(conversation_id),
+            legacy_file_name(conversation_id),
+        ] {
+            let path = self.dir.join(name);
+            if path.exists() {
+                std::fs::remove_file(path)?;
+            }
         }
         self.messages
             .retain(|m| m.conversation_id != conversation_id);
@@ -317,5 +322,34 @@ mod tests {
         assert_eq!(rows[1].body, "world");
         assert_eq!(std::fs::metadata(&path).unwrap().len(), valid_len);
         assert!(path.with_extension("corrupt").is_file());
+    }
+
+    #[test]
+    fn clear_conversation_removes_legacy_and_current_journals() {
+        let dir = TempDir::new().unwrap();
+        let key = [7u8; 32];
+        let current = dir.path().join(file_name("dm:aabb"));
+        let legacy = dir.path().join(legacy_file_name("dm:aabb"));
+        append_record(
+            &current,
+            &key,
+            file_name("dm:aabb").as_bytes(),
+            &message("01", "new"),
+        )
+        .unwrap();
+        append_record(
+            &legacy,
+            &key,
+            legacy_file_name("dm:aabb").as_bytes(),
+            &message("02", "old"),
+        )
+        .unwrap();
+
+        let mut history = History::open(dir.path(), key).unwrap();
+        assert_eq!(history.count(), 2);
+        history.clear_conversation("dm:aabb").unwrap();
+        assert!(!current.exists());
+        assert!(!legacy.exists());
+        assert_eq!(history.count(), 0);
     }
 }
