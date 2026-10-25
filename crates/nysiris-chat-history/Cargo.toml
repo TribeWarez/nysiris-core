@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Encrypted append-only local chat history for Nysiris native clients. Flat files only; no SQLite."
+readme = "README.md"
+keywords = ["chat", "history", "encryption", "storage"]
+categories = ["cryptography", "filesystem"]
 
 [dependencies]
 nysiris-core.workspace = true

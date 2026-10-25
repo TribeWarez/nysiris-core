@@ -32,6 +32,8 @@ pub fn seal_bytes(key: &[u8; 32], aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8
     Ok(out)
 }
 
+/// Open a sealed blob. Fails closed on a bad magic, short input, wrong key, or
+/// mismatched associated data.
 pub fn open_bytes(key: &[u8; 32], aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>> {
     if sealed.len() < MAGIC.len() + 24 {
         return Err(CoreError::Crypto("sealed file is too short".into()));
@@ -79,6 +81,7 @@ fn restrict_permissions(path: &Path) {
     }
 }
 
+/// Read and open a sealed blob written by [`write_sealed`].
 pub fn read_sealed(path: &Path, key: &[u8; 32], aad: &[u8]) -> Result<Vec<u8>> {
     let sealed = std::fs::read(path)?;
     open_bytes(key, aad, &sealed)

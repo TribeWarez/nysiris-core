@@ -11,25 +11,39 @@ use crate::error::{CoreError, Result};
 use crate::identity::ChatIdentity;
 use crate::ids::{msg_id_bytes, normalize_pubkey_hex, now_ms, random_hex};
 
+/// Length of a room id in bytes (rendered as 32 hex characters).
 pub const GROUP_ID_BYTES: usize = 16;
+/// Length of a room key in bytes.
 pub const GROUP_KEY_BYTES: usize = 32;
+/// Hard cap on room size, including this identity. Every message costs one send
+/// per member, so rooms stay small.
 pub const MAX_GROUP_MEMBERS: usize = 16;
+/// Maximum room name length in characters.
 pub const MAX_GROUP_NAME_CHARS: usize = 80;
+/// Domain separator mixed into the room message signature.
 pub const GROUP_MESSAGE_DOMAIN: &[u8] = b"nysiris-chat-v1/group-message";
+/// Domain separator mixed into the signed room invite.
 pub const GROUP_INVITE_DOMAIN: &[u8] = b"nysiris-chat-v1/group-invite";
+/// Domain separator for the room message encryption key.
 pub const GROUP_ENC_DOMAIN: &[u8] = b"nysiris-chat-v1/group-enc";
+/// Version of the room inner envelope and invite format.
 pub const GROUP_INNER_VERSION: u8 = 1;
 
 type Blake2b256 = Blake2b<U32>;
 
+/// A member of a room, as recorded in the local roster and the signed invite.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupMember {
+    /// Display name shown in the roster. Not authenticated beyond the invite.
     pub petname: String,
+    /// ed25519 chat public key, lowercase hex.
     pub pubkey: String,
+    /// Nym transport address used for fan-out.
     pub nym_address: String,
 }
 
 impl GroupMember {
+    /// Validate and normalize a room member.
     pub fn new(petname: &str, pubkey: &str, nym_address: &str) -> Result<Self> {
         let petname = petname.trim();
         if petname.is_empty() || petname.chars().count() > 64 {
@@ -50,17 +64,25 @@ impl GroupMember {
         })
     }
 
+    /// Build a room member from a saved contact.
     pub fn from_contact(contact: &Contact) -> Result<Self> {
         Self::new(&contact.petname, &contact.pubkey, &contact.nym_address)
     }
 }
 
+/// A room as known on this device. There is no authoritative server roster;
+/// every member holds a signed copy of this state.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
+    /// Room id, 16 bytes as lowercase hex.
     pub id: String,
+    /// Room name shown in the UI.
     pub name: String,
+    /// Shared room key as lowercase hex. Anyone holding it can read and post.
     pub key: String,
+    /// Local copy of the member list, including this identity.
     pub members: Vec<GroupMember>,
+    /// Unix milliseconds when the room was created.
     pub created_at: u64,
 }
 
@@ -97,15 +119,19 @@ impl Group {
         })
     }
 
+    /// Conversation id used for this room in history: `group:<room id>`.
     pub fn conversation_id(&self) -> String {
         format!("group:{}", self.id)
     }
 
+    /// Look up a member by public key.
     pub fn member(&self, pubkey: &str) -> Option<&GroupMember> {
         let key = pubkey.trim().to_lowercase();
         self.members.iter().find(|m| m.pubkey == key)
     }
 
+    /// Check the whole room state: id and key sizes, name bounds, member count,
+    /// and duplicate member keys.
     pub fn validate(&self) -> Result<()> {
         let id = hex::decode(&self.id)
             .map_err(|_| CoreError::InvalidInput("room id is not hex".into()))?;
@@ -135,6 +161,7 @@ impl Group {
         Ok(())
     }
 
+    /// Produce the signed invite that hands the room key to the other members.
     pub fn invite(&self, inviter: &ChatIdentity) -> Result<String> {
         self.validate()?;
         let inviter_pub = inviter.public_hex();
@@ -162,6 +189,8 @@ impl Group {
         Ok(serde_json::to_string(&invite)?)
     }
 
+    /// Join a room from a signed invite. Fails unless this identity's public key
+    /// is in the invited member list and the signature verifies.
     pub fn from_invite(json: &str, own_pubkey: &str) -> Result<Self> {
         let invite: GroupInvite = serde_json::from_str(json)?;
         invite.verify()?;
@@ -252,25 +281,39 @@ fn invite_sign_bytes(unsigned: &GroupInviteUnsigned) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Signed plaintext carried inside a sealed room message.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GroupInner {
+    /// Envelope version. Currently `1`.
     pub v: u8,
+    /// Room id, lowercase hex.
     pub group_id: String,
+    /// Sender ed25519 public key, lowercase hex.
     pub from: String,
+    /// Sender-supplied Unix timestamp in milliseconds.
     pub ts: u64,
+    /// Sender-generated message id, lowercase hex.
     #[serde(rename = "msgId")]
     pub msg_id: String,
+    /// Message text.
     pub body: String,
+    /// ed25519 signature over the domain-separated room fields.
     pub sig: String,
 }
 
+/// A room message sealed with the shared room key.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealedGroupMessage {
+    /// Envelope version. Currently `1`.
     pub v: u8,
+    /// Room id, lowercase hex.
     pub gid: String,
+    /// Sender-generated message id, lowercase hex.
     #[serde(rename = "msgId")]
     pub msg_id: String,
+    /// XChaCha20-Poly1305 nonce, hex (24 bytes).
     pub nonce: String,
+    /// Ciphertext, hex.
     pub ciphertext: String,
 }
 
@@ -306,6 +349,10 @@ fn group_aad(gid_hex: &str, msg_id_hex: &str) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Sign and JSON-pack the room inner envelope.
+///
+/// The signature covers the domain separator, room id, sender key, timestamp,
+/// message id, and body, so a member cannot relabel another member's message.
 pub fn pack_group_inner(
     identity: &ChatIdentity,
     gid: &str,
@@ -344,6 +391,8 @@ pub fn pack_group_inner(
     Ok(serde_json::to_string(&inner)?)
 }
 
+/// Verify and unpack a room inner envelope, checking that it belongs to
+/// `expected_gid`. Fails closed on any defect.
 pub fn unpack_group_inner(json: &str, expected_gid: &str) -> Result<GroupInner> {
     let inner: GroupInner = serde_json::from_str(json)?;
     if inner.v != GROUP_INNER_VERSION {
@@ -380,6 +429,10 @@ pub fn unpack_group_inner(json: &str, expected_gid: &str) -> Result<GroupInner> 
     Ok(GroupInner { from, ..inner })
 }
 
+/// Seal a signed room inner envelope with the shared room key.
+///
+/// The room id and message id are bound as associated data, so a sealed message
+/// cannot be replayed into another room or under another id.
 pub fn seal_group(
     key_hex: &str,
     gid: &str,
@@ -409,6 +462,8 @@ pub fn seal_group(
     })
 }
 
+/// Open a sealed room message with the shared room key, returning the inner
+/// JSON. The signature is verified separately by [`unpack_group_inner`].
 pub fn open_group(key_hex: &str, sealed: &SealedGroupMessage) -> Result<String> {
     if sealed.v != GROUP_INNER_VERSION {
         return Err(CoreError::Crypto("unsupported sealed room version".into()));

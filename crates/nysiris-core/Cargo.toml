@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Shared primitives for Nysiris native clients: identity, message framing, crypto, contacts, and transport traits."
+readme = "README.md"
+keywords = ["chat", "crypto", "identity", "transport", "p2p"]
+categories = ["cryptography", "network-programming"]
 
 [dependencies]
 blake2.workspace = true

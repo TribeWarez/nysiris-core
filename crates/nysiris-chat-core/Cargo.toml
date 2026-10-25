@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "P2P chat engine for Nysiris native clients: sealed DMs, contacts, conversation summaries, and encrypted local history."
+readme = "README.md"
+keywords = ["chat", "p2p", "messaging", "encryption"]
+categories = ["network-programming", "cryptography"]
 
 [dependencies]
 nysiris-core.workspace = true

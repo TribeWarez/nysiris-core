@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Nym transport adapter for Nysiris native clients. The real nym-sdk adapter is behind the nym feature and was verified on mainnet; default builds use an explicit unavailable stub."
+readme = "README.md"
+keywords = ["nym", "mixnet", "transport", "privacy"]
+categories = ["network-programming", "cryptography"]
 
 [features]
 default = []

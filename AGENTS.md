@@ -57,9 +57,10 @@ service side. Do not add them here until the extraction happens.
   `scripts/check-nym-pins.sh` (CI job `nym-pins`, resolution only, no build)
   fails if a from-scratch resolve drifts; keep the pins and `Cargo.lock` in
   step, and pass `--locked` for real builds.
-- Crates are packaging-ready but not on crates.io yet; publication is gated on
-  the `CORE_PUBLISH_ENABLED` repository variable. Do not publish a placeholder
-  version; crates.io versions are immutable.
+- `0.1.2` is published on crates.io. Each release tag publishes every crate in
+  dependency order and is gated on the `CORE_PUBLISH_ENABLED` repository
+  variable. Do not publish a placeholder version; crates.io versions are
+  immutable, so a metadata or README fix needs a new version.
 - Keep consumer compatibility: Nysiris must not depend on
   `nysiris-chat-core`; NCC must not depend on Nysiris. Publish crates in
   dependency order and pin consumers.

@@ -6,15 +6,22 @@ use crate::ids::{dm_conversation_id, normalize_pubkey_hex, now_ms};
 /// A locally saved peer. Contacts are local metadata; there is no directory.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Contact {
+    /// Local display name for this peer. Never sent on the wire.
     pub petname: String,
     /// ed25519 chat public key, lowercase hex.
     pub pubkey: String,
     /// Nym transport address: `<identity>.<encryption>@<gateway>`.
     pub nym_address: String,
+    /// Unix milliseconds when the contact was saved.
     pub created_at: u64,
 }
 
 impl Contact {
+    /// Validate and normalize a contact.
+    ///
+    /// The petname is trimmed and limited to 64 characters, the public key is
+    /// lowercased and length-checked, and the Nym address is trimmed and
+    /// limited to 256 characters.
     pub fn new(petname: &str, pubkey: &str, nym_address: &str) -> Result<Self> {
         let petname = petname.trim();
         if petname.is_empty() {
@@ -41,6 +48,7 @@ impl Contact {
         })
     }
 
+    /// Conversation id for the DM with this contact.
     pub fn conversation_id(&self) -> String {
         dm_conversation_id(&self.pubkey)
     }

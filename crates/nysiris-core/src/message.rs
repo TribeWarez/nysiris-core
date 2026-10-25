@@ -4,22 +4,33 @@ use crate::error::{CoreError, Result};
 use crate::identity::ChatIdentity;
 use crate::ids::{dm_conversation_id, msg_id_bytes, normalize_pubkey_hex};
 
+/// Maximum accepted message body, in bytes. Keeps one message inside a single
+/// Nym Sphinx payload after sealing and framing.
 pub const MAX_BODY_BYTES: usize = 1800;
+/// Domain separator mixed into the DM inner-envelope signature.
 pub const DM_INNER_DOMAIN: &[u8] = b"nysiris-chat-v1/dm-inner";
+/// Version of the signed DM inner envelope.
 pub const DM_INNER_VERSION: u8 = 1;
 
+/// Whether a stored message was sent or received by this identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
+    /// Received from the peer.
     Incoming,
+    /// Sent by this identity.
     Outgoing,
 }
 
+/// Delivery state recorded alongside a message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageState {
+    /// Handed to the transport without an error.
     Sent,
+    /// Waiting for an outbox retry.
     Queued,
+    /// The transport rejected the message.
     Failed,
 }
 
@@ -27,17 +38,26 @@ pub enum MessageState {
 /// encrypted history journal and in memory.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
+    /// Sender-generated message id, lowercase hex.
     pub msg_id: String,
+    /// `dm:<peer pubkey>` for direct messages, `group:<room id>` for rooms.
     pub conversation_id: String,
+    /// Sender's ed25519 public key, lowercase hex.
     pub from: String,
+    /// Recipient public key for DMs, room id for room messages.
     pub to: String,
+    /// Message text. Never persist this unencrypted.
     pub body: String,
+    /// Sender-supplied Unix timestamp in milliseconds.
     pub at: u64,
+    /// Whether this identity sent or received the message.
     pub direction: Direction,
+    /// Delivery state at the time the record was written.
     pub state: MessageState,
 }
 
 impl ChatMessage {
+    /// Build a received 1:1 message.
     pub fn incoming(from: &str, to: &str, msg_id: &str, body: &str, at: u64) -> Self {
         Self {
             msg_id: msg_id.to_lowercase(),
@@ -51,6 +71,7 @@ impl ChatMessage {
         }
     }
 
+    /// Build a sent 1:1 message.
     pub fn outgoing(from: &str, to: &str, msg_id: &str, body: &str, at: u64) -> Self {
         Self {
             msg_id: msg_id.to_lowercase(),
@@ -64,6 +85,7 @@ impl ChatMessage {
         }
     }
 
+    /// Build a received room message. `to` is the room id.
     pub fn incoming_group(from: &str, gid: &str, msg_id: &str, body: &str, at: u64) -> Self {
         Self {
             msg_id: msg_id.to_lowercase(),
@@ -77,6 +99,7 @@ impl ChatMessage {
         }
     }
 
+    /// Build a sent room message. `to` is the room id.
     pub fn outgoing_group(from: &str, gid: &str, msg_id: &str, body: &str, at: u64) -> Self {
         Self {
             msg_id: msg_id.to_lowercase(),
@@ -90,6 +113,7 @@ impl ChatMessage {
         }
     }
 
+    /// The other party: `from` for received messages, `to` for sent ones.
     pub fn peer_pub(&self) -> &str {
         match self.direction {
             Direction::Incoming => &self.from,
@@ -101,13 +125,20 @@ impl ChatMessage {
 /// Signed plaintext carried inside the sealed DM envelope.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DmInner {
+    /// Envelope version. Currently `1`.
     pub v: u8,
+    /// Sender ed25519 public key, lowercase hex.
     pub from: String,
+    /// Recipient ed25519 public key, lowercase hex.
     pub to: String,
+    /// Sender-supplied Unix timestamp in milliseconds.
     pub ts: u64,
+    /// Sender-generated message id, lowercase hex.
     #[serde(rename = "msgId")]
     pub msg_id: String,
+    /// Message text.
     pub body: String,
+    /// ed25519 signature over the domain-separated envelope fields.
     pub sig: String,
 }
 

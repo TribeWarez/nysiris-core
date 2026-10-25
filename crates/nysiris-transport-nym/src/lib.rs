@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! Nym transport adapter.
 //!
 //! The real `nym-sdk` implementation is behind the `nym` feature so the fast
@@ -6,9 +7,12 @@
 
 use std::time::Duration;
 
+/// A message received from the Nym transport.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InboundMessage {
+    /// Sealed payload exactly as the peer sent it.
     pub payload: Vec<u8>,
+    /// Optional 16-byte sender tag, when the transport layer supplies one.
     pub sender_tag: Option<[u8; 16]>,
 }
 

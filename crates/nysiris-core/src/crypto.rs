@@ -18,8 +18,10 @@ pub const DM_AAD: &[u8] = b"nysiris-chat-v1/dm";
 
 type Blake2b256 = Blake2b<U32>;
 
+/// A sealed direct message, as serialized and handed to the transport.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SealedDm {
+    /// Envelope version. Currently `1`.
     pub v: u8,
     /// Ephemeral X25519 public key, hex.
     pub epub: String,

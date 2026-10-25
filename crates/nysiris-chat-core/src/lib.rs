@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! P2P chat engine for native Nysiris clients.
 //!
 //! Supports sealed 1:1 DMs and capability-key rooms with client-side fan-out.
@@ -22,13 +23,18 @@ use nysiris_core::message::{pack_dm_inner, unpack_dm_inner, ChatMessage};
 use nysiris_core::transport::Transport;
 use serde::Serialize;
 
+/// Outcome of a room send: what went out and who accepted it.
 #[derive(Clone, Debug, Serialize)]
 pub struct GroupSendReport {
+    /// The message recorded in local history.
     pub message: ChatMessage,
+    /// Number of members the transport accepted the payload for.
     pub delivered: usize,
+    /// Per-member failures, formatted as `<petname>: <error>`.
     pub failed: Vec<String>,
 }
 
+/// The chat engine: contacts, rooms, history, and a pluggable transport.
 pub struct ChatEngine {
     identity: ChatIdentity,
     contacts: Vec<Contact>,
@@ -40,6 +46,10 @@ pub struct ChatEngine {
 }
 
 impl ChatEngine {
+    /// Build an engine from already-loaded state.
+    ///
+    /// `own_nym_address` is this device's Nym address; an empty string means the
+    /// engine is running against a mock transport.
     pub fn new(
         identity: ChatIdentity,
         contacts: Vec<Contact>,
@@ -59,35 +69,43 @@ impl ChatEngine {
         }
     }
 
+    /// This device's chat identity.
     pub fn identity(&self) -> &ChatIdentity {
         &self.identity
     }
 
+    /// Saved contacts, sorted by petname.
     pub fn contacts(&self) -> &[Contact] {
         &self.contacts
     }
 
+    /// Rooms known on this device.
     pub fn groups(&self) -> &[Group] {
         &self.groups
     }
 
+    /// Look up a room by id.
     pub fn group(&self, group_id: &str) -> Option<&Group> {
         let id = group_id.trim().to_lowercase();
         self.groups.iter().find(|g| g.id == id)
     }
 
+    /// The local encrypted history store.
     pub fn history(&self) -> &History {
         &self.history
     }
 
+    /// Short name of the transport in use.
     pub fn transport_name(&self) -> &'static str {
         self.transport.name()
     }
 
+    /// Current self status: `online`, `away`, `dnd`, or `invisible`.
     pub fn status(&self) -> &str {
         &self.status
     }
 
+    /// Set self status. Status is local; it is not broadcast to contacts.
     pub fn set_status(&mut self, status: &str) -> Result<()> {
         let status = status.trim();
         if !matches!(status, "online" | "away" | "dnd" | "invisible") {
@@ -99,6 +117,7 @@ impl ChatEngine {
         Ok(())
     }
 
+    /// Look up a saved contact by public key.
     pub fn contact(&self, pubkey: &str) -> Option<&Contact> {
         let key = pubkey.trim().to_lowercase();
         self.contacts.iter().find(|c| c.pubkey == key)
@@ -120,6 +139,7 @@ impl ChatEngine {
         contact
     }
 
+    /// Remove a contact by public key. Returns whether anything was removed.
     pub fn remove_contact(&mut self, pubkey: &str) -> bool {
         let key = pubkey.trim().to_lowercase();
         let before = self.contacts.len();
@@ -168,6 +188,8 @@ impl ChatEngine {
         Ok(group)
     }
 
+    /// Forget a room locally. Returns whether anything was removed. This does
+    /// not notify other members and does not rotate the room key.
     pub fn remove_group(&mut self, group_id: &str) -> bool {
         let id = group_id.trim().to_lowercase();
         let before = self.groups.len();
@@ -175,6 +197,7 @@ impl ChatEngine {
         self.groups.len() != before
     }
 
+    /// Re-export the signed invite for a saved room, to hand to a new member.
     pub fn group_invite(&self, group_id: &str) -> Result<String> {
         let group = self
             .group(group_id)
@@ -279,6 +302,8 @@ impl ChatEngine {
         }
     }
 
+    /// Open and verify an inbound sealed room message. Returns `None` for a
+    /// duplicate.
     pub fn receive_group(&mut self, payload: &[u8]) -> Result<Option<ChatMessage>> {
         let sealed: SealedGroupMessage = serde_json::from_slice(payload)?;
         let group = self
@@ -335,15 +360,20 @@ impl ChatEngine {
         self.receive_group(&payload)
     }
 
+    /// Newest-last messages for the DM with `peer_pub`. `limit` of `0` returns
+    /// everything.
     pub fn history_for(&self, peer_pub: &str, limit: usize) -> Vec<ChatMessage> {
         self.history.list(&dm_conversation_id(peer_pub), limit)
     }
 
+    /// Newest-last messages for a room. `limit` of `0` returns everything.
     pub fn group_history(&self, group_id: &str, limit: usize) -> Vec<ChatMessage> {
         let id = group_id.trim().to_lowercase();
         self.history.list(&format!("group:{id}"), limit)
     }
 
+    /// Direct-message conversations, most recent first. Rooms are excluded;
+    /// use [`ChatEngine::group_summaries`] for those.
     pub fn conversations(&self) -> Vec<ConversationSummary> {
         let mut grouped: BTreeMap<String, Vec<&ChatMessage>> = BTreeMap::new();
         for message in self.history.all() {
@@ -378,6 +408,7 @@ impl ChatEngine {
         out
     }
 
+    /// Rooms with their local member list and last message, most recent first.
     pub fn group_summaries(&self) -> Vec<GroupSummary> {
         let mut out: Vec<GroupSummary> = self
             .groups
@@ -402,6 +433,7 @@ impl ChatEngine {
         out
     }
 
+    /// Delete every stored message from the history journals.
     pub fn clear_history(&mut self) -> Result<()> {
         self.history.clear_all()
     }

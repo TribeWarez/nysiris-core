@@ -39,24 +39,30 @@ requires a new room key.
 
 ## Quick start
 
-The crates are not on crates.io yet (see [Releasing](#releasing)). Pin the
-current tag:
+The crates are published on crates.io. Take a caret requirement and let
+`Cargo.lock` pin the exact version:
 
 ```toml
 [dependencies]
-nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
-nysiris-chat-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
-nysiris-chat-history = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
+nysiris-core = "0.1"
+nysiris-chat-core = "0.1"
+nysiris-chat-history = "0.1"
 ```
 
 The real Nym adapter is opt-in and compiles the full `nym-sdk` stack:
 
 ```toml
-nysiris-transport-nym = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2", features = ["nym"] }
+nysiris-transport-nym = { version = "0.1", features = ["nym"] }
 ```
 
 Without the feature, `NymTransport::connect` fails explicitly instead of
 pretending to deliver messages, so the default build stays light and offline.
+
+To track a specific source revision instead, use a git tag:
+
+```toml
+nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.2" }
+```
 
 Working on this repository itself:
 
@@ -86,8 +92,7 @@ cargo test --workspace --locked
 | Live Nym | DM and room delivery verified between two native daemons on mainnet |
 | Test suite | Fully offline; the fake transport is used everywhere |
 
-Still pending: OS keychain integration, attachments, packaging, and crates.io
-publication.
+Still pending: OS keychain integration, attachments, and desktop packaging.
 
 ## Verify
 
@@ -154,10 +159,11 @@ See [`SECURITY.md`](SECURITY.md) for scope and reporting details.
 
 ## Releasing
 
-Releases are cut by tagging the workspace version:
+Releases are cut by bumping `[workspace.package].version`, committing that bump,
+and tagging the same commit with an **annotated** tag:
 
 ```bash
-git tag v0.1.2 && git push origin v0.1.2
+git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
 ```
 
 [`release.yml`](.github/workflows/release.yml) verifies the tag against
@@ -167,16 +173,17 @@ order when publication is enabled:
 
 ```bash
 gh variable set CORE_PUBLISH_ENABLED --repo TribeWarez/nysiris-core --body true
-gh secret set CARGO_REGISTRY_TOKEN --repo TribeWarez/nysiris-core
+gh secret set CARGO_REGISTRY_TOKEN --repo TribeWarez/nysiris-core --env crates-io
 ```
 
 Or run `./scripts/configure-github.ps1 -EnablePublish` once; it also creates the
 `crates-io` environment. crates.io versions are immutable, so the publish job
 skips versions that already exist and a failed release can be re-run.
 
-Publication is currently disabled, so no version of these crates exists on
-crates.io yet. The `v0.1.0` tag predates this workflow and is already pinned by
-NCC's submodule; cut new releases by tagging a new commit rather than moving it.
+`0.1.2` is the first published version. The `v0.1.0` tag predates this workflow
+and is already pinned by NCC's submodule; cut new releases by tagging a new
+commit rather than moving it. A tag only reaches crates.io once the tag matches
+`[workspace.package].version`.
 
 ## Community
 
@@ -185,6 +192,7 @@ NCC's submodule; cut new releases by tagging a new commit rather than moving it.
 | [Discussions](https://github.com/TribeWarez/nysiris-core/discussions) | Questions, design debate, and show-and-tell |
 | [Issues](https://github.com/TribeWarez/nysiris-core/issues) | Reproducible bugs and concrete feature requests |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, gates, and review expectations |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history and what changed |
 | [`SECURITY.md`](SECURITY.md) | Private vulnerability reporting |
 | [`AGENTS.md`](AGENTS.md) | Scope rules for human and AI contributors |
 | [Sponsor](https://github.com/sponsors/TribeWarez) | Fund maintenance of the protocol crates |

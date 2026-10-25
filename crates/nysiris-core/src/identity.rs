@@ -22,18 +22,24 @@ impl fmt::Debug for ChatIdentity {
 }
 
 impl ChatIdentity {
+    /// Generate a new identity from the operating-system RNG.
     pub fn generate() -> Self {
         let mut bytes = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut bytes);
         Self::from_secret_bytes(bytes)
     }
 
+    /// Restore an identity from raw ed25519 secret bytes.
+    ///
+    /// The bytes are the encryption key material: never log them or store them
+    /// unencrypted.
     pub fn from_secret_bytes(bytes: [u8; 32]) -> Self {
         Self {
             signing: SigningKey::from_bytes(&bytes),
         }
     }
 
+    /// Restore an identity from a 32-byte hex secret.
     pub fn from_secret_hex(value: &str) -> Result<Self> {
         let raw = hex::decode(value.trim())
             .map_err(|_| CoreError::InvalidKey("secret key is not hex".into()))?;
@@ -53,14 +59,17 @@ impl ChatIdentity {
         self.signing.to_bytes()
     }
 
+    /// Secret serialization as lowercase hex. Callers must encrypt it at rest.
     pub fn secret_hex(&self) -> String {
         hex::encode(self.secret_bytes())
     }
 
+    /// The ed25519 public key bytes, which are also the stable chat id.
     pub fn public_bytes(&self) -> [u8; 32] {
         self.signing.verifying_key().to_bytes()
     }
 
+    /// The ed25519 public key as lowercase hex.
     pub fn public_hex(&self) -> String {
         hex::encode(self.public_bytes())
     }
@@ -70,10 +79,14 @@ impl ChatIdentity {
         self.signing.to_scalar_bytes()
     }
 
+    /// Sign a message with this identity's ed25519 key, returning hex.
     pub fn sign_hex(&self, message: &[u8]) -> String {
         hex::encode(self.signing.sign(message).to_bytes())
     }
 
+    /// Verify a hex-encoded ed25519 signature against a hex public key.
+    ///
+    /// Uses strict verification, so non-canonical signatures are rejected.
     pub fn verify_hex(public_hex: &str, message: &[u8], signature_hex: &str) -> Result<()> {
         let key_bytes = crate::ids::pubkey_bytes(public_hex)?;
         let key = VerifyingKey::from_bytes(&key_bytes)
@@ -92,6 +105,7 @@ impl ChatIdentity {
             .map_err(|e| CoreError::Crypto(format!("bad signature: {e}")))
     }
 
+    /// Seal `plaintext` to a peer's ed25519 public key.
     pub fn seal_to(
         &self,
         recipient_pub_hex: &str,
@@ -101,6 +115,7 @@ impl ChatIdentity {
         seal_dm(recipient_pub_hex, aad, plaintext)
     }
 
+    /// Open a sealed blob addressed to this identity.
     pub fn open_sealed(&self, sealed: &SealedDm, aad: &[u8]) -> Result<Vec<u8>> {
         open_dm(self, sealed, aad)
     }

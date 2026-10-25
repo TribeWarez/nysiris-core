@@ -22,6 +22,10 @@ struct Job {
     ack: mpsc::SyncSender<std::result::Result<(), String>>,
 }
 
+/// The real Nym transport: a background client thread plus a job channel.
+///
+/// Status is drawn from the local Nym client, so addresses are handed out
+/// through [`NymTransport::address`] and shared in invites.
 pub struct NymTransport {
     address: String,
     jobs: tokio_mpsc::UnboundedSender<Job>,
@@ -31,6 +35,10 @@ pub struct NymTransport {
 }
 
 impl NymTransport {
+    /// Start a Nym client (or reuse the stored one) under `data_dir`.
+    ///
+    /// Blocks up to the ready timeout while the client connects. `gateway`
+    /// overrides the network default when set.
     pub fn connect(data_dir: impl AsRef<Path>, gateway: Option<String>) -> Result<Self> {
         let data_dir = data_dir.as_ref().to_path_buf();
         eprintln!(
@@ -75,14 +83,19 @@ impl NymTransport {
         }
     }
 
+    /// Always `true`: this build has the real adapter.
     pub fn is_available() -> bool {
         true
     }
 
+    /// This client's Nym address, for handing out in invites.
     pub fn address(&self) -> &str {
         &self.address
     }
 
+    /// Wait up to `timeout` for one inbound message.
+    ///
+    /// Returns `Ok(None)` on timeout, and an error if the client thread died.
     pub fn recv_timeout(&self, timeout: Duration) -> Result<Option<InboundMessage>> {
         let inbound = self
             .inbound
@@ -97,6 +110,7 @@ impl NymTransport {
         }
     }
 
+    /// Ask the client thread to stop. Also called from `Drop`.
     pub fn shutdown(&self) {
         if let Ok(mut slot) = self.shutdown.lock() {
             if let Some(sender) = slot.take() {

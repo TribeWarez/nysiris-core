@@ -72,9 +72,9 @@ cargo check -p nysiris-transport-nym --features nym --locked   # heavy first bui
   library and existing crates.
 - Chat protocol domains are `nysiris-chat-v1/*`. Never reuse Nysiris social
   `fly-social-v1/*` domains or copy social provider routes.
-- Public items are API. Nothing is published to crates.io yet, but
-  `cargo semver-checks` still runs against the previous tag, so renames and
-  signature changes need to be intentional.
+- Public items are API. `0.1.x` is published and crates.io versions are
+  immutable, so `cargo semver-checks` runs against the previous tag and renames
+  or signature changes need to be intentional.
 
 ## Pull requests
 

@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Test transport and fixtures for Nysiris native clients."
+readme = "README.md"
+keywords = ["testing", "transport", "fixtures", "chat"]
+categories = ["development-tools"]
 
 [dependencies]
 nysiris-core.workspace = true

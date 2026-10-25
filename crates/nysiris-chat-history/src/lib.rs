@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! Encrypted, append-only local chat history.
 //!
 //! One journal per conversation, named by a BLAKE2b hash of the conversation
@@ -19,6 +20,7 @@ type Blake2b256 = Blake2b<U32>;
 
 const MAX_RECORD_BYTES: usize = 1_000_000;
 
+/// Encrypted append-only message store for one application data directory.
 #[derive(Debug)]
 pub struct History {
     dir: PathBuf,
@@ -28,6 +30,11 @@ pub struct History {
 }
 
 impl History {
+    /// Open every journal in `dir`, decrypting with `key`.
+    ///
+    /// Missing directories are created. A journal that cannot be decrypted or
+    /// parsed fails the whole open rather than being skipped, so truncation and
+    /// tampering are visible.
     pub fn open(dir: impl AsRef<Path>, key: [u8; 32]) -> Result<Self> {
         let dir = dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&dir)?;
@@ -56,18 +63,22 @@ impl History {
         })
     }
 
+    /// Directory holding the journals.
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
+    /// All messages, oldest first.
     pub fn all(&self) -> &[ChatMessage] {
         &self.messages
     }
 
+    /// Number of stored messages.
     pub fn count(&self) -> usize {
         self.messages.len()
     }
 
+    /// Whether a message id is already stored.
     pub fn contains(&self, msg_id: &str) -> bool {
         self.ids.contains(&msg_id.to_lowercase())
     }
@@ -102,6 +113,7 @@ impl History {
         rows
     }
 
+    /// Delete every journal and clear the in-memory view.
     pub fn clear_all(&mut self) -> Result<()> {
         for entry in std::fs::read_dir(&self.dir)? {
             let path = entry?.path();
@@ -114,6 +126,7 @@ impl History {
         Ok(())
     }
 
+    /// Delete one conversation's journal and forget its messages.
     pub fn clear_conversation(&mut self, conversation_id: &str) -> Result<()> {
         let path = self.dir.join(file_name(conversation_id));
         if path.exists() {
