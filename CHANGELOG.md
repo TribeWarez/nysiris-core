@@ -4,7 +4,7 @@ Notable changes to the Nysiris-Core crates. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are the workspace
 version and the matching annotated tag.
 
-## [Unreleased]
+## [0.1.4] - 2026-10-25
 
 ### Added
 

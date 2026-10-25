@@ -67,7 +67,7 @@ pretending to deliver messages, so the default build stays light and offline.
 To track a specific source revision instead, use a git tag:
 
 ```toml
-nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.3" }
+nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.4" }
 ```
 
 Working on this repository itself:
@@ -187,7 +187,8 @@ Or run `./scripts/configure-github.ps1 -EnablePublish` once; it also creates the
 skips versions that already exist and a failed release can be re-run.
 
 Publication started with `0.1.2`; `0.1.3` adds crate READMEs and documented public
-items. The `v0.1.0` tag predates this workflow
+items; `0.1.4` adds atomic sealed storage, torn-history recovery, and inbound
+sender checks. The `v0.1.0` tag predates this workflow
 and is already pinned by NCC's submodule; cut new releases by tagging a new
 commit rather than moving it. A tag only reaches crates.io once the tag matches
 `[workspace.package].version`.
