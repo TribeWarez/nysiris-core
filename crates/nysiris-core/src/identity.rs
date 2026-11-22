@@ -105,19 +105,15 @@ impl ChatIdentity {
             .map_err(|e| CoreError::Crypto(format!("bad signature: {e}")))
     }
 
-    /// Seal `plaintext` to a peer's ed25519 public key.
-    pub fn seal_to(
-        &self,
-        recipient_pub_hex: &str,
-        aad: &[u8],
-        plaintext: &[u8],
-    ) -> Result<SealedDm> {
-        seal_dm(recipient_pub_hex, aad, plaintext)
+    /// Seal `plaintext` to a peer's ed25519 public key, byte-exact with the
+    /// Nysiris browser `sealDm`.
+    pub fn seal_to(&self, recipient_pub_hex: &str, plaintext: &[u8]) -> Result<SealedDm> {
+        seal_dm(recipient_pub_hex, plaintext)
     }
 
     /// Open a sealed blob addressed to this identity.
-    pub fn open_sealed(&self, sealed: &SealedDm, aad: &[u8]) -> Result<Vec<u8>> {
-        open_dm(self, sealed, aad)
+    pub fn open_sealed(&self, sealed: &SealedDm) -> Result<Vec<u8>> {
+        open_dm(self, sealed)
     }
 }
 

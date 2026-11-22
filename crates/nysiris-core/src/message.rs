@@ -1,16 +1,47 @@
-use serde::{Deserialize, Serialize};
+//! Signed DM inner envelope, byte-exact with the Nysiris browser client.
+//!
+//! The envelope is JSON inside the sealed box: `{v, from, ts, msgId, bodyB64,
+//! atts?, sig}`. Signature bytes are
+//! `fly-social-v1/dm-inner || from(32) || ts_be64 || msgId(16) || body || atts`,
+//! where `atts` is the canonical attachment list (empty for none). Version 2
+//! adds attachments; a version-1 envelope with no `atts` verifies identically.
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::attach::{canonical_attachments, parse_attachments, AttachmentRef};
 use crate::error::{CoreError, Result};
 use crate::identity::ChatIdentity;
-use crate::ids::{dm_conversation_id, msg_id_bytes, normalize_pubkey_hex};
+use crate::ids::{msg_id_bytes, now_ms, pubkey_bytes, random_hex};
 
 /// Maximum accepted message body, in bytes. Keeps one message inside a single
 /// Nym Sphinx payload after sealing and framing.
 pub const MAX_BODY_BYTES: usize = 1800;
 /// Domain separator mixed into the DM inner-envelope signature.
-pub const DM_INNER_DOMAIN: &[u8] = b"nysiris-chat-v1/dm-inner";
-/// Version of the signed DM inner envelope.
-pub const DM_INNER_VERSION: u8 = 1;
+pub const DM_INNER_DOMAIN: &[u8] = b"fly-social-v1/dm-inner";
+/// Version of the signed DM inner envelope (`atts` support).
+pub const DM_INNER_VERSION: u8 = 2;
+
+mod b64 {
+    use super::*;
+
+    pub(super) fn serialize<S: Serializer>(
+        bytes: &[u8],
+        s: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        s.serialize_str(&BASE64.encode(bytes))
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> std::result::Result<Vec<u8>, D::Error> {
+        let value = String::deserialize(d)?;
+        BASE64
+            .decode(value.trim())
+            .map_err(|_| serde::de::Error::custom("bodyB64 is not base64"))
+    }
+}
 
 /// Whether a stored message was sent or received by this identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +92,7 @@ impl ChatMessage {
     pub fn incoming(from: &str, to: &str, msg_id: &str, body: &str, at: u64) -> Self {
         Self {
             msg_id: msg_id.to_lowercase(),
-            conversation_id: dm_conversation_id(from),
+            conversation_id: crate::ids::dm_conversation_id(from),
             from: from.to_lowercase(),
             to: to.to_lowercase(),
             body: body.to_string(),
@@ -75,7 +106,7 @@ impl ChatMessage {
     pub fn outgoing(from: &str, to: &str, msg_id: &str, body: &str, at: u64) -> Self {
         Self {
             msg_id: msg_id.to_lowercase(),
-            conversation_id: dm_conversation_id(to),
+            conversation_id: crate::ids::dm_conversation_id(to),
             from: from.to_lowercase(),
             to: to.to_lowercase(),
             body: body.to_string(),
@@ -123,103 +154,136 @@ impl ChatMessage {
 }
 
 /// Signed plaintext carried inside the sealed DM envelope.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DmInner {
-    /// Envelope version. Currently `1`.
+    /// Envelope version: 1 (legacy, no attachments) or 2 (with `atts`).
     pub v: u8,
     /// Sender ed25519 public key, lowercase hex.
     pub from: String,
-    /// Recipient ed25519 public key, lowercase hex.
-    pub to: String,
     /// Sender-supplied Unix timestamp in milliseconds.
     pub ts: u64,
-    /// Sender-generated message id, lowercase hex.
+    /// Sender-generated message id, lowercase hex (16 bytes).
     #[serde(rename = "msgId")]
     pub msg_id: String,
-    /// Message text.
-    pub body: String,
+    /// Message bytes, standard padded base64 on the wire as `bodyB64`.
+    #[serde(rename = "bodyB64", with = "b64")]
+    pub body: Vec<u8>,
+    /// Attachment refs (keys included — this envelope is sealed).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub atts: Vec<AttachmentRef>,
     /// ed25519 signature over the domain-separated envelope fields.
     pub sig: String,
 }
 
 fn inner_sign_bytes(
-    from_hex: &str,
-    to_hex: &str,
+    from_bytes: &[u8; 32],
     ts: u64,
-    msg_id_hex: &str,
-    body: &str,
-) -> Result<Vec<u8>> {
-    let from = crate::ids::pubkey_bytes(from_hex)?;
-    let to = crate::ids::pubkey_bytes(to_hex)?;
-    let msg_id = msg_id_bytes(msg_id_hex)?;
-    let mut out = Vec::with_capacity(DM_INNER_DOMAIN.len() + 32 + 32 + 8 + 16 + body.len());
+    msg_id_bytes: &[u8; 16],
+    body: &[u8],
+    atts: &[AttachmentRef],
+) -> Vec<u8> {
+    let att_bytes = canonical_attachments(atts);
+    let mut out =
+        Vec::with_capacity(DM_INNER_DOMAIN.len() + 32 + 8 + 16 + body.len() + att_bytes.len());
     out.extend_from_slice(DM_INNER_DOMAIN);
-    out.extend_from_slice(&from);
-    out.extend_from_slice(&to);
+    out.extend_from_slice(from_bytes);
     out.extend_from_slice(&ts.to_be_bytes());
-    out.extend_from_slice(&msg_id);
-    out.extend_from_slice(body.as_bytes());
-    Ok(out)
+    out.extend_from_slice(msg_id_bytes);
+    out.extend_from_slice(body);
+    out.extend_from_slice(&att_bytes);
+    out
 }
 
-/// Sign and JSON-pack the inner DM envelope.
-pub fn pack_dm_inner(
+/// A signed, JSON-packed inner envelope and its random 16-byte message id.
+#[derive(Clone, Debug)]
+pub struct PackedDm {
+    /// JSON envelope, ready to be sealed with `seal_dm`.
+    pub json: String,
+    /// Lowercase hex 16-byte id — the conversation dedupe key.
+    pub msg_id: String,
+}
+
+fn pack_at(
     identity: &ChatIdentity,
-    to_pub_hex: &str,
     msg_id_hex: &str,
     ts: u64,
-    body: &str,
+    body: &[u8],
+    atts: &[AttachmentRef],
 ) -> Result<String> {
-    if body.is_empty() {
-        return Err(CoreError::InvalidInput("message body is empty".into()));
+    if body.is_empty() || body.len() > MAX_BODY_BYTES {
+        return Err(CoreError::InvalidInput(
+            "DM body has an invalid size".into(),
+        ));
     }
-    if body.len() > MAX_BODY_BYTES {
-        return Err(CoreError::InvalidInput(format!(
-            "message body exceeds {MAX_BODY_BYTES} bytes"
-        )));
-    }
+    let atts = parse_attachments(atts)?;
     let from = identity.public_hex();
-    let to = normalize_pubkey_hex(to_pub_hex)?;
-    msg_id_bytes(msg_id_hex)?;
-    let bytes = inner_sign_bytes(&from, &to, ts, msg_id_hex, body)?;
+    let from_bytes = pubkey_bytes(&from)?;
+    let id = msg_id_bytes(msg_id_hex)?;
+    let bytes = inner_sign_bytes(&from_bytes, ts, &id, body, &atts);
     let inner = DmInner {
         v: DM_INNER_VERSION,
         from,
-        to,
         ts,
-        msg_id: msg_id_hex.to_lowercase(),
-        body: body.to_string(),
+        msg_id: msg_id_hex.trim().to_lowercase(),
+        body: body.to_vec(),
+        atts,
         sig: identity.sign_hex(&bytes),
     };
     Ok(serde_json::to_string(&inner)?)
 }
 
+/// Sign a 1:1 message with a fresh id and local timestamp. The sender's
+/// identity is proven inside the sealed box only; the provider cannot see it.
+pub fn pack_dm_inner(
+    identity: &ChatIdentity,
+    body: &[u8],
+    atts: &[AttachmentRef],
+) -> Result<PackedDm> {
+    let msg_id = random_hex(16);
+    Ok(PackedDm {
+        json: pack_at(identity, &msg_id, now_ms(), body, atts)?,
+        msg_id,
+    })
+}
+
+/// Deterministic packing for shared conformance vectors. Production code must
+/// use `pack_dm_inner` so ids and timestamps are fresh.
+pub fn pack_dm_inner_at(
+    identity: &ChatIdentity,
+    msg_id_hex: &str,
+    ts: u64,
+    body: &[u8],
+    atts: &[AttachmentRef],
+) -> Result<String> {
+    pack_at(identity, msg_id_hex, ts, body, atts)
+}
+
 /// Verify and unpack an inner DM envelope. Fails closed on any defect.
-pub fn unpack_dm_inner(json: &str, own_pub_hex: &str) -> Result<DmInner> {
+pub fn unpack_dm_inner(json: &str) -> Result<DmInner> {
     let inner: DmInner = serde_json::from_str(json)?;
-    if inner.v != DM_INNER_VERSION {
+    if inner.v != DM_INNER_VERSION && inner.v != 1 {
         return Err(CoreError::InvalidInput(format!(
             "unsupported DM inner version {}",
             inner.v
         )));
-    }
-    let from = normalize_pubkey_hex(&inner.from)?;
-    let to = normalize_pubkey_hex(&inner.to)?;
-    let own = normalize_pubkey_hex(own_pub_hex)?;
-    if to != own {
-        return Err(CoreError::InvalidInput(
-            "DM inner envelope is addressed to another key".into(),
-        ));
     }
     if inner.body.is_empty() || inner.body.len() > MAX_BODY_BYTES {
         return Err(CoreError::InvalidInput(
             "DM body has an invalid size".into(),
         ));
     }
-    msg_id_bytes(&inner.msg_id)?;
-    let bytes = inner_sign_bytes(&from, &to, inner.ts, &inner.msg_id, &inner.body)?;
+    let from = crate::ids::normalize_pubkey_hex(&inner.from)?;
+    let from_bytes = pubkey_bytes(&from)?;
+    let id = msg_id_bytes(&inner.msg_id)?;
+    let atts = parse_attachments(&inner.atts)?;
+    let bytes = inner_sign_bytes(&from_bytes, inner.ts, &id, &inner.body, &atts);
     ChatIdentity::verify_hex(&from, &bytes, &inner.sig)?;
-    Ok(DmInner { from, to, ..inner })
+    Ok(DmInner {
+        from,
+        atts,
+        ..inner
+    })
 }
 
 #[cfg(test)]
@@ -227,25 +291,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inner_envelope_round_trips_and_binds_recipient() {
+    fn inner_envelope_round_trips_and_binds_sender() {
         let alice = ChatIdentity::from_secret_bytes([1u8; 32]);
-        let bob = ChatIdentity::from_secret_bytes([2u8; 32]);
-        let id = "ab".repeat(16);
-        let packed = pack_dm_inner(&alice, &bob.public_hex(), &id, 123, "hello").unwrap();
-        let opened = unpack_dm_inner(&packed, &bob.public_hex()).unwrap();
-        assert_eq!(opened.body, "hello");
+        let packed = pack_dm_inner(&alice, b"hello", &[]).unwrap();
+        let opened = unpack_dm_inner(&packed.json).unwrap();
+        assert_eq!(opened.body, b"hello");
         assert_eq!(opened.from, alice.public_hex());
-        assert!(unpack_dm_inner(&packed, &alice.public_hex()).is_err());
+        assert_eq!(opened.v, 2);
     }
 
     #[test]
-    fn tampered_body_fails_verification() {
+    fn tampered_body_and_attachments_fail_verification() {
         let alice = ChatIdentity::from_secret_bytes([1u8; 32]);
-        let bob = ChatIdentity::from_secret_bytes([2u8; 32]);
-        let id = "ab".repeat(16);
-        let packed = pack_dm_inner(&alice, &bob.public_hex(), &id, 123, "hello").unwrap();
-        let mut value: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        value["body"] = serde_json::json!("hello!");
-        assert!(unpack_dm_inner(&value.to_string(), &bob.public_hex()).is_err());
+        let packed = pack_dm_inner(&alice, b"hello", &[]).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&packed.json).unwrap();
+        value["bodyB64"] = serde_json::json!("aGVsbG8h");
+        assert!(unpack_dm_inner(&value.to_string()).is_err());
+
+        let att = AttachmentRef {
+            id: "ab".repeat(32),
+            name: "x.png".into(),
+            mime: "image/png".into(),
+            size: 1,
+            key: "cd".repeat(32),
+        };
+        let with_att = pack_dm_inner(&alice, b"hello", std::slice::from_ref(&att)).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&with_att.json).unwrap();
+        value["atts"][0]["size"] = serde_json::json!(2);
+        assert!(unpack_dm_inner(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn version_one_messages_verify_unchanged() {
+        let alice = ChatIdentity::from_secret_bytes([1u8; 32]);
+        let packed = pack_dm_inner_at(&alice, &"ab".repeat(16), 123, b"hello", &[]).unwrap();
+        let mut legacy: serde_json::Value = serde_json::from_str(&packed).unwrap();
+        legacy["v"] = serde_json::json!(1);
+        legacy.as_object_mut().unwrap().remove("atts");
+        // The signature does not bind the version byte, so a v1 relabel still
+        // verifies — this is the compatibility rule shared with the browser.
+        assert!(unpack_dm_inner(&legacy.to_string()).is_ok());
     }
 }

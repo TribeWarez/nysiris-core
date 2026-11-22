@@ -11,7 +11,7 @@ here touches the network, Nym, or the filesystem unless your test asks it to.
 
 ```toml
 [dev-dependencies]
-nysiris-testkit = "0.1"
+nysiris-testkit = "0.2"
 ```
 
 ## What you get

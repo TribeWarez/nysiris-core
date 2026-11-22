@@ -15,16 +15,17 @@ chat service, no server-side message store, and no SQLite.
 
 ```toml
 [dependencies]
-nysiris-core = "0.1"
+nysiris-core = "0.2"
 ```
 
 ## What you get
 
 - `ChatIdentity` — ed25519 identity with X25519 key agreement.
-- `SealedDm` and `DM_AAD` — ephemeral DH, BLAKE2b-256 KDF,
-  XChaCha20-Poly1305.
-- `DmInner` and `pack_dm_inner` — signed inner envelope bound to `from`, `to`,
-  `ts`, `msgId`, and body.
+- `SealedDm` — `{epubHex, nonceHex, ciphertextB64}`, the byte-exact browser
+  envelope: ephemeral DH, BLAKE2b-256 KDF, XChaCha20-Poly1305, no AAD.
+- `DmInner` and `pack_dm_inner` — signed inner envelope bound to `from`, `ts`,
+  `msgId`, body, and canonical attachment refs. Version 2 carries `atts`;
+  version 1 (no attachments) still verifies.
 - `Group` and `GroupMember` — capability-key rooms with signed invites, a
   16-member cap, and `MAX_GROUP_NAME_CHARS`.
 - `Contact`, `ChatMessage`, `Direction`, `MessageState`, conversation summaries,

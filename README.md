@@ -50,15 +50,15 @@ The crates are published on crates.io. Take a caret requirement and let
 
 ```toml
 [dependencies]
-nysiris-core = "0.1"
-nysiris-chat-core = "0.1"
-nysiris-chat-history = "0.1"
+nysiris-core = "0.2"
+nysiris-chat-core = "0.2"
+nysiris-chat-history = "0.2"
 ```
 
 The real Nym adapter is opt-in and compiles the full `nym-sdk` stack:
 
 ```toml
-nysiris-transport-nym = { version = "0.1", features = ["nym"] }
+nysiris-transport-nym = { version = "0.2", features = ["nym"] }
 ```
 
 Without the feature, `NymTransport::connect` fails explicitly instead of
@@ -67,7 +67,7 @@ pretending to deliver messages, so the default build stays light and offline.
 To track a specific source revision instead, use a git tag:
 
 ```toml
-nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.1.4" }
+nysiris-core = { git = "https://github.com/TribeWarez/nysiris-core", tag = "v0.2.0" }
 ```
 
 Working on this repository itself:
@@ -91,7 +91,7 @@ cargo test --workspace --locked
 | Area | State |
 |---|---|
 | Identity and DM crypto | ed25519 → X25519, ephemeral DH, BLAKE2b-256 KDF, XChaCha20-Poly1305 |
-| DM envelopes | Signed inner envelope binds `from`, `to`, `ts`, `msgId`, body |
+| DM envelopes | Signed `fly-social-v1/dm-inner` v2 binds `from`, `ts`, `msgId`, body, attachments; byte-exact with the browser |
 | Rooms | Capability-key groups, client-side fan-out, 16-member cap |
 | History | Encrypted append-only journals, hashed conversation filenames |
 | Transport | `Transport` trait; `nysiris-testkit` fake; real Nym behind `nym` |
@@ -138,8 +138,11 @@ builds.
 - `nysiris-core` stays Nym-free and UI-free; `nym-sdk` lives only in
   `nysiris-transport-nym`.
 - No Qt, Python, React, Nysiris service binaries, or NCC daemon code here.
-- Chat protocol domains are `nysiris-chat-v1/*`, never Nysiris social
-  `fly-social-v1/*` domains.
+- DM wire domains are `fly-social-v1/dm` and `fly-social-v1/dm-inner`,
+  byte-exact with the Nysiris browser; only rooms keep the NCC-local
+  `nysiris-chat-v1/*` domains. The shared fixture in
+  `crates/nysiris-core/tests/fixtures/dm-v2.json` is the contract — Nysiris CI
+  verifies its own browser copy matches it.
 - Chat history is encrypted flat files; no SQLite, no plaintext message bytes on
   disk.
 - Nysiris must not depend on `nysiris-chat-core`; NCC must not depend on
@@ -188,7 +191,8 @@ skips versions that already exist and a failed release can be re-run.
 
 Publication started with `0.1.2`; `0.1.3` adds crate READMEs and documented public
 items; `0.1.4` adds atomic sealed storage, torn-history recovery, and inbound
-sender checks. The `v0.1.0` tag predates this workflow
+sender checks, and `0.2.0` aligns the DM wire format with Nysiris (a breaking
+change). The `v0.1.0` tag predates this workflow
 and is already pinned by NCC's submodule; cut new releases by tagging a new
 commit rather than moving it. A tag only reaches crates.io once the tag matches
 `[workspace.package].version`.

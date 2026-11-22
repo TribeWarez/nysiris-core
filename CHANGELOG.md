@@ -4,13 +4,28 @@ Notable changes to the Nysiris-Core crates. The format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are the workspace
 version and the matching annotated tag.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-22
+
+### Changed (breaking)
+
+- DM wire format is now byte-exact with the Nysiris browser: sealed boxes are
+  `{epubHex, nonceHex, ciphertextB64}` (base64 ciphertext, no `v`, no AAD), and
+  signed inner envelopes use `fly-social-v1/dm-inner` v2 with `bodyB64` plus
+  optional `atts`. The old `nysiris-chat-v1/dm` domain, AAD, `to` binding, and
+  hex ciphertext are gone.
+- `seal_to`/`open_sealed` no longer take an AAD argument; `pack_dm_inner` takes
+  body bytes plus attachment refs; `unpack_dm_inner` no longer takes the local
+  public key. `DM_AAD` is removed.
 
 ### Added
 
+- `attach::{AttachmentRef, canonical_attachments}` mirrors Nysiris' encrypted
+  attachment refs, including the fail-closed validation rules.
+- Shared conformance fixture (`tests/fixtures/dm-v2.json`), a generating
+  example, and a cross-repository test. Nysiris CI checks out this pinned
+  submodule, runs its tests, and verifies the browser copy is identical.
 - `ChatEngine::clear_conversation` for deleting one conversation's encrypted
-  journal.
-- Nym address shape validation for contacts and room members.
+  journal, and Nym address shape validation for contacts and room members.
 
 ## [0.1.4] - 2026-10-25
 

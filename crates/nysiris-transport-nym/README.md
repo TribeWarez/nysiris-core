@@ -16,7 +16,7 @@ stack:
 
 ```toml
 [dependencies]
-nysiris-transport-nym = { version = "0.1", features = ["nym"] }
+nysiris-transport-nym = { version = "0.2", features = ["nym"] }
 ```
 
 Without the feature, `NymTransport::connect` returns an explicit error instead

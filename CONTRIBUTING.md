@@ -5,7 +5,7 @@ the Nysiris services and NCC, so the bar is "small, explained, and tested"
 rather than "large and clever".
 
 Read [`AGENTS.md`](AGENTS.md) first. It lists the invariants (Nym-free core, no
-SQLite, no chat service, `nysiris-chat-v1/*` domains, room caps) that pull
+SQLite, no chat service, shared `fly-social-v1/*` DM domains, room caps) that pull
 requests must not relax. It also explains how the crates are consumed.
 
 ## Before you start
@@ -70,8 +70,12 @@ cargo check -p nysiris-transport-nym --features nym --locked   # heavy first bui
   keys, or contact lists.
 - New dependencies need a reason in the pull request. Prefer the standard
   library and existing crates.
-- Chat protocol domains are `nysiris-chat-v1/*`. Never reuse Nysiris social
-  `fly-social-v1/*` domains or copy social provider routes.
+- DM wire domains are `fly-social-v1/dm` and `fly-social-v1/dm-inner`, shared
+  byte-for-byte with the Nysiris browser. Only rooms use the NCC-local
+  `nysiris-chat-v1/*` domains. Never copy social provider routes.
+- DM wire changes must regenerate the shared fixture in
+  `crates/nysiris-core/tests/fixtures/dm-v2.json`; Nysiris CI compares it with
+  its browser copy.
 - Public items are API. `0.1.x` is published and crates.io versions are
   immutable, so `cargo semver-checks` runs against the previous tag and renames
   or signature changes need to be intentional.

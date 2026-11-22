@@ -16,9 +16,9 @@ Part of the [Nysiris-Core](https://github.com/TribeWarez/nysiris-core) workspace
 
 ```toml
 [dependencies]
-nysiris-chat-core = "0.1"
-nysiris-core = "0.1"
-nysiris-chat-history = "0.1"
+nysiris-chat-core = "0.2"
+nysiris-core = "0.2"
+nysiris-chat-history = "0.2"
 ```
 
 Add `nysiris-transport-nym` with `features = ["nym"]` for a real transport, or

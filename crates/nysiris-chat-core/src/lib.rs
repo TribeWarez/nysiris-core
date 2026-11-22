@@ -11,7 +11,7 @@ use std::sync::Arc;
 use nysiris_chat_history::History;
 use nysiris_core::contact::Contact;
 use nysiris_core::conversation::{ConversationSummary, GroupSummary};
-use nysiris_core::crypto::{SealedDm, DM_AAD};
+use nysiris_core::crypto::SealedDm;
 use nysiris_core::error::{CoreError, Result};
 use nysiris_core::group::{
     open_group, pack_group_inner, seal_group, unpack_group_inner, Group, GroupMember,
@@ -19,7 +19,7 @@ use nysiris_core::group::{
 };
 use nysiris_core::identity::ChatIdentity;
 use nysiris_core::ids::{dm_conversation_id, now_ms, random_hex};
-use nysiris_core::message::{pack_dm_inner, unpack_dm_inner, ChatMessage};
+use nysiris_core::message::{pack_dm_inner_at, unpack_dm_inner, ChatMessage};
 use nysiris_core::transport::Transport;
 use serde::Serialize;
 
@@ -215,10 +215,8 @@ impl ChatEngine {
 
         let msg_id = random_hex(16);
         let ts = now_ms();
-        let inner = pack_dm_inner(&self.identity, &contact.pubkey, &msg_id, ts, body)?;
-        let sealed = self
-            .identity
-            .seal_to(&contact.pubkey, DM_AAD, inner.as_bytes())?;
+        let inner = pack_dm_inner_at(&self.identity, &msg_id, ts, body.as_bytes(), &[])?;
+        let sealed = self.identity.seal_to(&contact.pubkey, inner.as_bytes())?;
         let payload = serde_json::to_vec(&sealed)?;
 
         let message = ChatMessage::outgoing(
@@ -278,18 +276,25 @@ impl ChatEngine {
     /// Open and verify an inbound sealed DM. Returns `None` for a duplicate.
     pub fn receive(&mut self, payload: &[u8]) -> Result<Option<ChatMessage>> {
         let sealed: SealedDm = serde_json::from_slice(payload)?;
-        let plain = self.identity.open_sealed(&sealed, DM_AAD)?;
+        let plain = self.identity.open_sealed(&sealed)?;
         let inner_json = String::from_utf8(plain)
             .map_err(|_| CoreError::InvalidInput("DM inner is not UTF-8".into()))?;
-        let inner = unpack_dm_inner(&inner_json, &self.identity.public_hex())?;
+        let inner = unpack_dm_inner(&inner_json)?;
         if self.contact(&inner.from).is_none() {
             return Err(CoreError::InvalidInput(
                 "DM sender is not a saved contact".into(),
             ));
         }
+        let body = std::str::from_utf8(&inner.body)
+            .map_err(|_| CoreError::InvalidInput("DM body is not UTF-8".into()))?;
 
-        let message =
-            ChatMessage::incoming(&inner.from, &inner.to, &inner.msg_id, &inner.body, inner.ts);
+        let message = ChatMessage::incoming(
+            &inner.from,
+            &self.identity.public_hex(),
+            &inner.msg_id,
+            body,
+            inner.ts,
+        );
         if !self.history.append(&message)? {
             return Ok(None);
         }
@@ -348,8 +353,8 @@ impl ChatEngine {
     ) -> Result<Option<ChatMessage>> {
         let msg_id = random_hex(16);
         let ts = now_ms();
-        let inner = pack_dm_inner(sender, &self.identity.public_hex(), &msg_id, ts, body)?;
-        let sealed = sender.seal_to(&self.identity.public_hex(), DM_AAD, inner.as_bytes())?;
+        let inner = pack_dm_inner_at(sender, &msg_id, ts, body.as_bytes(), &[])?;
+        let sealed = sender.seal_to(&self.identity.public_hex(), inner.as_bytes())?;
         let payload = serde_json::to_vec(&sealed)?;
         self.receive(&payload)
     }
@@ -553,7 +558,7 @@ mod tests {
         let outbound = alice_tx.take();
         let carol = ChatIdentity::from_secret_bytes([3u8; 32]);
         let sealed: SealedDm = serde_json::from_slice(&outbound[0].payload).unwrap();
-        assert!(carol.open_sealed(&sealed, DM_AAD).is_err());
+        assert!(carol.open_sealed(&sealed).is_err());
     }
 
     #[test]

@@ -12,7 +12,7 @@ Part of the [Nysiris-Core](https://github.com/TribeWarez/nysiris-core) workspace
 
 ```toml
 [dependencies]
-nysiris-chat-history = "0.1"
+nysiris-chat-history = "0.2"
 ```
 
 ## How it stores records

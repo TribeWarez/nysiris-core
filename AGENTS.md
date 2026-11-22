@@ -31,11 +31,17 @@ service side. Do not add them here until the extraction happens.
 - No Qt, Python, React, Nysiris service binaries, or NCC daemon code here.
 - Chat history is encrypted flat files. No SQLite, no plaintext message bytes
   on disk.
-- Chat protocol domains are `nysiris-chat-v1/*`. Do not reuse Nysiris social
-  `fly-social-v1/*` domains or copy social provider routes.
+- DM wire domains are `fly-social-v1/dm` (seal) and `fly-social-v1/dm-inner`
+  (signature), byte-exact with the Nysiris browser. Only rooms keep the
+  NCC-local `nysiris-chat-v1/*` domains; never copy social provider routes.
 - DM crypto: ed25519 identity → X25519, ephemeral DH, BLAKE2b-256 KDF,
-  XChaCha20-Poly1305. The signed inner envelope binds `from`, `to`, `ts`,
-  `msgId`, and body.
+  XChaCha20-Poly1305. The sealed box carries `{epubHex, nonceHex,
+  ciphertextB64}` with no AAD and no version field; the signed inner envelope
+  binds `from`, `ts`, `msgId`, body, and canonical attachment refs. Version 2
+  adds `atts`; a v1 envelope with no attachments verifies identically.
+- Any change to these bytes requires regenerating
+  `crates/nysiris-core/tests/fixtures/dm-v2.json` and updating Nysiris' copy in
+  the same change; cross-repository CI enforces this.
 - Rooms are capability-key groups: a random room key is shared in a signed
   invite, the sender seals one message and fans it out to every member, and no
   relay or server roster exists. Cap rooms at 16 members. Removing a member
